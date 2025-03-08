@@ -1,0 +1,400 @@
+{
+    "Motor": {
+        "nitrogen_tank": {
+            "length": {
+                "Value": 0.2354,
+                "Unit": "m"
+            },
+            "CG_lox": {
+                "Value": 2.62295,
+                "Unit": "m"
+            },
+            "CG_ethanol": {
+                "Value": 1.42216,
+                "Unit": "m"
+            },
+            "outer_diameter": {
+                "Value": 0.093,
+                "Unit": "m"
+            },
+            "thickness": {
+                "Value": 0.002,
+                "Unit": "m"
+            },
+            "massflow": {
+                "Value": 0.03,
+                "Unit": "kg/s"
+            }
+        },
+        "ethanol_tank": {
+            "length": {
+                "Value": 0.57361,
+                "Unit": "m"
+            },
+            "CG": {
+                "Value": 0.82555,
+                "Unit": "m"
+            },
+            "outer_diameter": {
+                "Value": 0.115,
+                "Unit": "m"
+            },
+            "thickness": {
+                "Value": 0.0025,
+                "Unit": "m"
+            },
+            "massflow": {
+                "Value": 0.5,
+                "Unit": "kg/s"
+            }
+        },
+        "lox_tank": {
+            "length": {
+                "Value": 0.57398,
+                "Unit": "m"
+            },
+            "CG": {
+                "Value": 1.93252,
+                "Unit": "m"
+            },
+            "outer_diameter": {
+                "Value": 0.115,
+                "Unit": "m"
+            },
+            "thickness": {
+                "Value": 0.0025,
+                "Unit": "m"
+            },
+            "massflow": {
+                "Value": 0.6,
+                "Unit": "kg/s"
+            }
+        },
+        "nozzle": {
+            "diameter": {
+                "Value": 0.075,
+                "Unit": "m"
+            },
+            "position": {
+                "Value": -0.04,
+                "Unit": "m"
+            }
+        },
+        "presets": {
+            "thrust": {
+                "Value": 2000.0,
+                "Unit": "N"
+            },
+            "overfill_percentage": {
+                "Value": 0.001,
+                "Unit": "%"
+            },
+            "ethanol_mass": {
+                "Value": 2.7,
+                "Unit": "kg"
+            },
+            "ethanol_temperature": {
+                "Value": 298.15,
+                "Unit": "K"
+            },
+            "ethanol_pressure": {
+                "Value": 3000000.0,
+                "Unit": "Pa"
+            },
+            "lox_mass": {
+                "Value": 3.5,
+                "Unit": "kg"
+            },
+            "lox_temperature": {
+                "Value": 73.15,
+                "Unit": "K"
+            },
+            "lox_pressure": {
+                "Value": 3000000.0,
+                "Unit": "Pa"
+            },
+            "nitrogen_temperature": {
+                "Value": 298.15,
+                "Unit": "K"
+            },
+            "nitrogen_pressure": {
+                "Value": 30000000.0,
+                "Unit": "Pa"
+            },
+            "ice_mass": {
+                "Value": 0.5,
+                "Unit": "kg"
+            },
+            "burn_time": {
+                "Value": 5.1,
+                "Unit": "s"
+            },
+            "holddown_time": {
+                "Value": 1.1,
+                "Unit": "s"
+            }
+        }
+    },
+    "Flags": {
+        "flag": {
+            "use_preset_mass": {
+                "Value": 1.0,
+                "Unit": "-"
+            },
+            "use_max_nitrogen_mass": {
+                "Value": 1.0,
+                "Unit": "-"
+            },
+            "use_max_mass": {
+                "Value": 0.0,
+                "Unit": "-"
+            },
+            "use_static_thrust": {
+                "Value": 1.0,
+                "Unit": "-"
+            },
+            "account_for_ice": {
+                "Value": 1.0,
+                "Unit": "-"
+            }
+        }
+    },
+    "Flight": {
+        "flight": {
+            "rail_length": {
+                "Value": 11.0,
+                "Unit": "m"
+            },
+            "inclination": {
+                "Value": 84.0,
+                "Unit": "\u00b0"
+            },
+            "heading": {
+                "Value": 133.0,
+                "Unit": "\u00b0"
+            }
+        }
+    },
+    "Environment": {
+        "env": {
+            "date": {
+                "Value": [
+                    2024.0,
+                    12.0,
+                    24.0,
+                    13.0,
+                    0.0,
+                    0.0
+                ],
+                "Unit": "datetime_tuple"
+            },
+            "latitude": {
+                "Value": 39.12368,
+                "Unit": "\u00b0"
+            },
+            "longitude": {
+                "Value": -8.03333,
+                "Unit": "\u00b0"
+            },
+            "timezone": {
+                "Value": "Europe/Lisbon",
+                "Unit": "text"
+            }
+        }
+    },
+    "Rocket": {
+        "geometry": {
+            "weight": {
+                "Value": 16.58,
+                "Unit": "kg"
+            },
+            "length": {
+                "Value": 3.765,
+                "Unit": "m"
+            },
+            "CG": {
+                "Value": 1.813,
+                "Unit": "m"
+            },
+            "inertia_z": {
+                "Value": 0.0255,
+                "Unit": "kg*m^2"
+            },
+            "inertia_xy": {
+                "Value": 16.8,
+                "Unit": "kg*m^2"
+            },
+            "nosecone_length": {
+                "Value": 0.65,
+                "Unit": "m"
+            },
+            "thickness": {
+                "Value": 0.0014,
+                "Unit": "m"
+            },
+            "diameter": {
+                "Value": 0.1328,
+                "Unit": "m"
+            }
+        },
+        "railbuttons": {
+            "upper": {
+                "Value": 1.64667,
+                "Unit": "m"
+            },
+            "lower": {
+                "Value": 0.2975,
+                "Unit": "m"
+            }
+        },
+        "tailcone": {
+            "diameter": {
+                "Value": 0.0978,
+                "Unit": "m"
+            },
+            "length": {
+                "Value": 0.24564,
+                "Unit": "m"
+            },
+            "cylindrical_height": {
+                "Value": 0.0348,
+                "Unit": "m"
+            }
+        },
+        "fins": {
+            "name": {
+                "Value": "Biconvex",
+                "Unit": "text"
+            },
+            "amount": {
+                "Value": 4.0,
+                "Unit": "-"
+            },
+            "root_chord": {
+                "Value": 0.19902,
+                "Unit": "m"
+            },
+            "tip_chord": {
+                "Value": 0.0794,
+                "Unit": "m"
+            },
+            "span": {
+                "Value": 0.0964,
+                "Unit": "m"
+            },
+            "sweep_length": {
+                "Value": 0.06389,
+                "Unit": "m"
+            },
+            "position": {
+                "Value": 0.233,
+                "Unit": "m"
+            },
+            "shape_points_amount": {
+                "Value": 7.0,
+                "Unit": "-"
+            },
+            "shape_point_1": {
+                "Value": [
+                    0.0,
+                    0.0
+                ],
+                "Unit": "m"
+            },
+            "shape_point_2": {
+                "Value": [
+                    -0.0265,
+                    0.0036
+                ],
+                "Unit": "m"
+            },
+            "shape_point_3": {
+                "Value": [
+                    -0.0902,
+                    0.114
+                ],
+                "Unit": "m"
+            },
+            "shape_point_4": {
+                "Value": [
+                    -0.17,
+                    0.114
+                ],
+                "Unit": "m"
+            },
+            "shape_point_5": {
+                "Value": [
+                    -0.234,
+                    0.017
+                ],
+                "Unit": "m"
+            },
+            "shape_point_6": {
+                "Value": [
+                    -0.0265,
+                    0.00359
+                ],
+                "Unit": "m"
+            },
+            "shape_point_7": {
+                "Value": [
+                    0.0,
+                    0.0
+                ],
+                "Unit": "m"
+            }
+        },
+        "main_parachute": {
+            "cd_s": {
+                "Value": 6.911503837897546,
+                "Unit": "-"
+            },
+            "trigger": {
+                "Value": 450.0,
+                "Unit": "m"
+            },
+            "sampling_rate": {
+                "Value": 105.0,
+                "Unit": "Hz"
+            },
+            "lag": {
+                "Value": 4.0,
+                "Unit": "s"
+            },
+            "noise": {
+                "Value": [
+                    0.0,
+                    8.3,
+                    0.5
+                ],
+                "Unit": "Pa"
+            }
+        },
+        "drogue_parachute": {
+            "cd_s": {
+                "Value": 0.336875,
+                "Unit": "-"
+            },
+            "trigger": {
+                "Value": "apogee",
+                "Unit": "text"
+            },
+            "sampling_rate": {
+                "Value": 105.0,
+                "Unit": "Hz"
+            },
+            "lag": {
+                "Value": 1.0,
+                "Unit": "s"
+            },
+            "noise": {
+                "Value": [
+                    0.0,
+                    8.3,
+                    0.5
+                ],
+                "Unit": "Pa"
+            }
+        }
+    }
+}
