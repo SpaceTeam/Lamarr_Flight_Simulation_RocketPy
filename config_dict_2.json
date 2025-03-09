@@ -82,7 +82,7 @@
         },
         "presets": {
             "thrust": {
-                "Value": 2000.0,
+                "Value": 3000.0,
                 "Unit": "N"
             },
             "overfill_percentage": {
