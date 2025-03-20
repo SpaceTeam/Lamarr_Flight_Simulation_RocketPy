@@ -1,0 +1,42 @@
+<engine-database>
+  <engine-list>
+    <engine FDiv="10" FFix="1" FStep="-1." Isp="195.96" Itot="39.78" Type="liquid" auto-calc-cg="0" auto-calc-mass="1"
+    avgThrust="18.082" burn-time="3" cgDiv="10" cgFix="1" cgStep="-1." code="SKULDRSE_1700N" delays="0" dia="130" exitDia="" initWt="4132" 
+    len="1500" mDiv="10" mFix="1" mStep="-1." massFrac="36.32" mfg="TUST" peakThrust="31." propWt="4132" tDiv="10" tFix="1" 
+    tStep="-1." throatDia="">
+      <data>
+        <eng-data cg="49.085" f="1798.41783" t="0.0"/>
+        <eng-data cg="52.911" f="1780.30361" t="0.1"/>
+        <eng-data cg="55.789" f="1749.90137" t="0.2"/>
+        <eng-data cg="58.675" f="1716.06346" t="0.3"/>
+        <eng-data cg="62.535" f="1842.79025" t="0.4"/>
+        <eng-data cg="65.441" f="1835.09857" t="0.5"/>
+        <eng-data cg="68.357" f="1816.23228" t="0.6"/>
+        <eng-data cg="72.263" f="1795.90196" t="0.7"/>
+        <eng-data cg="75.206" f="1781.11636" t="0.8"/>
+        <eng-data cg="78.164" f="1763.79304" t="0.9"/>
+	<eng-data cg="81.130" f="1753.62476" t="1.0"/>
+	<eng-data cg="85.130" f="1728.50717" t="1.1"/>
+	<eng-data cg="88.147" f="1716.97568" t="1.2"/>
+	<eng-data cg="91.188" f="1704.68186" t="1.3"/>
+	<eng-data cg="95.282" f="1695.16128" t="1.4"/>
+	<eng-data cg="98.389" f="1689.19636" t="1.5"/>
+	<eng-data cg="101.530" f="1685.49082" t="1.6"/>
+	<eng-data cg="105.784" f="1675.0937" t="1.7"/>
+	<eng-data cg="109.031" f="1673.07432" t="1.8"/>
+	<eng-data cg="112.337" f="1658.40113" t="1.9"/>
+	<eng-data cg="115.713" f="1652.3247" t="2.0"/>
+	<eng-data cg="120.346" f="1640.14685" t="2.1"/>
+	<eng-data cg="123.945" f="1634.38178" t="2.2"/>
+	<eng-data cg="127.677" f="1625.8207" t="2.3"/>
+	<eng-data cg="132.922" f="1621.15075" t="2.4"/>
+	<eng-data cg="137.120" f="1620.78407" t="2.5"/>
+	<eng-data cg="141.632" f="1617.05845" t="2.6"/>
+	<eng-data cg="148.318" f="1619.55112" t="2.7"/>
+	<eng-data cg="154.093" f="1602.24163" t="2.8"/>
+	<eng-data cg="160.819" f="1606.86386" t="2.9"/>
+	<eng-data cg="169.157" f="1593.94195" t="3.0"/>
+      </data>
+    </engine>
+  </engine-list>
+</engine-database>
