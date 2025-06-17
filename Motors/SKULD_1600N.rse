@@ -1,0 +1,14 @@
+<engine-database>
+  <engine-list>
+    <engine FDiv="10" FFix="1" FStep="-1." Isp="250" Itot="39.78" Type="reloadable" auto-calc-cg="1" auto-calc-mass="1"
+      avgThrust="1600.0" burn-time="10.153" cgDiv="10" cgFix="1" cgStep="-1." code="SKULD1600N10sR" delays="4000,8000" dia="24"
+      exitDia="0" initWt="207" len="70" mDiv="10" mFix="1" mStep="-1" massFrac="36.32" mfg="TUST" peakThrust="1600"
+      propWt="1600" tDiv="10" tFix="1" tStep="-1" throatDia="0">
+      <data>
+        <eng-data cg="35" f="1600" m="207" t="0.001"/>
+        <eng-data cg="35" f="1600" m="207" t="10.152"/>
+        <eng-data cg="35" f="0" m="0" t="10.153"/>
+      </data>
+    </engine>
+  </engine-list>
+</engine-database>

@@ -1,7 +1,7 @@
 <engine-database>
   <engine-list>
     <engine FDiv="10" FFix="1" FStep="-1." Isp="195.96" Itot="39.78" Type="liquid" auto-calc-cg="0" auto-calc-mass="1"
-    avgThrust="18.082" burn-time="3" cgDiv="10" cgFix="1" cgStep="-1." code="SKULDRSE" delays="0" dia="130" exitDia="" initWt="4132" 
+    avgThrust="18.082" burn-time="3" cgDiv="10" cgFix="1" cgStep="-1." code="SKULD1950N3sR" delays="0" dia="130" exitDia="" initWt="4132" 
     len="1500" mDiv="10" mFix="1" mStep="-1." massFrac="36.32" mfg="TUST" peakThrust="31." propWt="4132" tDiv="10" tFix="1" 
     tStep="-1." throatDia="">
       <data>
