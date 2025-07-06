@@ -301,7 +301,7 @@
                 "Unit": "m"
             },
             "shape_points_amount": {
-                "Value": 7.0,
+                "Value": 6.0,
                 "Unit": "-"
             },
             "shape_point_1": {
@@ -313,43 +313,36 @@
             },
             "shape_point_2": {
                 "Value": [
-                    -0.020,
-                    0.002
+                    -0.015,
+                    0.00107
                 ],
                 "Unit": "m"
             },
             "shape_point_3": {
                 "Value": [
-                    0,
-                    0.020
+                    -0.015,
+                    0.110
                 ],
                 "Unit": "m"
             },
             "shape_point_4": {
                 "Value": [
-                    0,
+                    -0.0466,
                     0.110
                 ],
                 "Unit": "m"
             },
             "shape_point_5": {
                 "Value": [
-                    -0.0372,
-                    0.110
-                ],
-                "Unit": "m"
-            },
-            "shape_point_6": {
-                "Value": [
                     -0.245,
                     0.017
                 ],
                 "Unit": "m"
             },
-            "shape_point_7": {
+            "shape_point_6": {
                 "Value": [
-                    0,
-                    0
+                    0.0,
+                    0.0
                 ],
                 "Unit": "m"
             }
@@ -408,11 +401,11 @@
         },
         "drag": {
             "power_off": {
-                "Value": "dragfiles/24deg_off_drag.csv",
+                "Value": "dragfiles/25deg_off_drag.csv",
                 "Unit": "text"
             },
             "power_on": {
-                "Value": "dragfiles/24deg_on_drag.csv",
+                "Value": "dragfiles/25deg_on_drag.csv",
                 "Unit": "text"
             }
         }

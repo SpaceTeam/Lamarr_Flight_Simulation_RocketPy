@@ -106,7 +106,7 @@
                 "Unit": "kg"
             },
             "lox_temperature": {
-                "Value": 73.15,
+                "Value": 90.15,
                 "Unit": "K"
             },
             "lox_pressure": {
