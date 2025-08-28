@@ -186,14 +186,12 @@
     "Environment": {
         "env": {
             "date": {
-                "Value": [
-                    2024.0,
-                    12.0,
-                    24.0,
-                    13.0,
-                    0.0,
-                    0.0
-                ],
+                "year": 2024,
+                "month": 12,
+                "day": 24,
+                "hour": 13,
+                "minute": 0,
+                "second": 0,
                 "Unit": "datetime_tuple"
             },
             "latitude": {
