@@ -44,7 +44,7 @@
                 "Unit": "m"
             },
             "massflow": {
-                "Value": 0.4,
+                "Value": 0.3,
                 "Unit": "kg/s"
             }
         },
@@ -66,7 +66,7 @@
                 "Unit": "m"
             },
             "massflow": {
-                "Value": 0.6,
+                "Value": 0.5,
                 "Unit": "kg/s"
             }
         },
@@ -82,7 +82,7 @@
         },
         "presets": {
             "thrust": {
-                "Value": 2000.0,
+                "Value": "thrust.csv",
                 "Unit": "N"
             },
             "overfill_percentage": {
@@ -126,11 +126,11 @@
                 "Unit": "kg"
             },
             "burn_time": {
-                "Value": 5.1,
+                "Value": 9.5,
                 "Unit": "s"
             },
             "holddown_time": {
-                "Value": 1.5,
+                "Value": 0.3,
                 "Unit": "s"
             }
         }
@@ -150,7 +150,7 @@
                 "Unit": "-"
             },
             "use_static_thrust": {
-                "Value": 1.0,
+                "Value": 0.0,
                 "Unit": "-"
             },
             "account_for_ice": {
@@ -186,14 +186,12 @@
     "Environment": {
         "env": {
             "date": {
-                "Value": [
-                    2024.0,
-                    12.0,
-                    24.0,
-                    13.0,
-                    0.0,
-                    0.0
-                ],
+                "year": 2024,
+                "month": 12,
+                "day": 24,
+                "hour": 13,
+                "minute": 0,
+                "second": 0,
                 "Unit": "datetime_tuple"
             },
             "latitude": {
@@ -243,7 +241,7 @@
         },
         "nosecone": {
             "length": {
-                "Value": 0.63,
+                "Value": 0.554,
                 "Unit": "m"
             },
             "kind": {
@@ -324,7 +322,7 @@
             },
             "shape_point_3": {
                 "Value": [
-                    -0.0911,
+                    -0.0635,
                     0.110
                 ],
                 "Unit": "m"
@@ -398,11 +396,11 @@
         },
         "drag": {
             "power_off": {
-                "Value": "dragfiles/31deg_off_drag.csv",
+                "Value": "dragfiles/27deg_off_drag.csv",
                 "Unit": "text"
             },
             "power_on": {
-                "Value": "dragfiles/31deg_on_drag.csv",
+                "Value": "dragfiles/27deg_on_drag.csv",
                 "Unit": "text"
             }
         }
