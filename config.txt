@@ -1,103 +1,84 @@
 # Rocket configuration data
 # env_config
 envType=Reanalysis
-date=(2025, 10, 12, 17, 00, 00)     # yyyy, mm, dd, hh, mm, ss    # preset
+date=(2025, 10, 12, 17, 00, 00)         # yyyy, mm, dd, hh, mm, ss    # preset
 latitude=39.232465                      # Launch latitude             # preset
-longitude=-8.172108                    # Launch longitude            # preset
+longitude=-8.172108                     # Launch longitude            # preset
 timezone=Europe/Lisbon                  # GMT+1                       # preset
 
 # motor_config
-holddown_time=1.1                # s       # preset
+holddown_time=1.1                       # s       # preset
 
 # nitrogen_tank
-nitrogen_tank_length=235                   # mm      # measured
-nitrogen_tank_CG_ethanol=1450              # mm      # measured # CG ethanol nitrogen tank
-nitrogen_tank_CG_lox=2653                  # mm      # measured # CG lox nitrogen tank
-nitrogen_tank_outer_diameter=93             # mm      # measured
-nitrogen_tank_volume=1.2                   # l       # measured
-nitrogen_tank_massflow=0.03                # kg/s    # estimate
+nitrogen_tank_length=235                # mm      # measured
+nitrogen_tank_CG_ethanol=1450           # mm      # measured # CG ethanol nitrogen tank
+nitrogen_tank_CG_lox=2653               # mm      # measured # CG lox nitrogen tank
+nitrogen_tank_outer_diameter=93         # mm      # measured
+nitrogen_tank_volume=1.2                # l       # measured
+nitrogen_tank_massflow=0.03             # kg/s    # estimate
 
 # ethanol_tank
-ethanol_tank_length=573                   # mm      # measured
-ethanol_tank_CG=852                       # mm      # measured
-ethanol_tank_outer_diameter=115            # mm      # measured
-ethanol_tank_volume=5.27                  # l       # measured
-ethanol_tank_massflow=0.45                # kg/s    # tested
+ethanol_tank_length=573                 # mm      # measured
+ethanol_tank_CG=852                     # mm      # measured
+ethanol_tank_outer_diameter=115         # mm      # measured
+ethanol_tank_volume=5.27                # l       # measured
+ethanol_tank_massflow=0.45              # kg/s    # tested
 
 # lox_tank_
-lox_tank_length=573                   # mm      # measured
-lox_tank_CG=1960                      # mm      # measured
-lox_tank_outer_diameter=115           # mm      # measured
-lox_tank_volume=5.27                 # l       # measured
-lox_tank_massflow=0.56                # kg/s    # tested
+lox_tank_length=573                     # mm      # measured
+lox_tank_CG=1960                        # mm      # measured
+lox_tank_outer_diameter=115             # mm      # measured
+lox_tank_volume=5.27                    # l       # measured
+lox_tank_massflow=0.56                  # kg/s    # tested
 
 #nozzle
-nozzle_diameter=75                  # mm      # measured
-nozzle_position=-40                 # mm      # measured
+nozzle_diameter=75                      # mm      # measured
+nozzle_position=-40                     # mm      # measured
 
 thrust=thrust_euroc_launch.csv,thrust_08_25.csv,thrust.csv               # N       # measured
 
-# temperature
-temperature_nitrogen=298.15               # K       # preset (= 25°C)
-temperature_ethanol=298.15               # K       # preset (= 25°C)
-temperature_lox=93.15                    # K       # preset (= -180°C)
-
-# pressure
-pressure_nitrogen=30000000             # Pa     # preset
-pressure_ethanol=3000000              # Pa     # preset
-pressure_lox=3000000                  # Pa     # preset
-
 # rocket_config
-total_weight=16200               # g       # weighed dry mass
-total_length=3707                # mm      # measured
-total_CG=1813                    # mm      # measured
-moment_of_intertia_Z=0.0255      # kg*m^2  # calculated
-moment_of_intertia_XY=16.8       # kg*m^2  # calculated
+rocket_weight=16200                     # g       # weighed dry mass
+rocket_length=3707                      # mm      # measured
+rocket_CG=1813                          # mm      # measured
+rocket_moment_of_intertia_Z=0.0255      # kg*m^2  # calculated
+rocket_moment_of_intertia_XY=16.8       # kg*m^2  # calculated
+rocket_wall_thickness=1.4               # mm      # measured
+rocket_diameter=132.8                   # mm      # measured
 
 # nosecone
-nosecone_length=561                   # mm      # measured    # 575 + 66 - 80 = 561
+nosecone_length=561                     # mm      # measured    # 575 + 66 - 80 = 561
 nosecone_kind=lv haack
 
 # railbuttons
-railbuttons_upper=1646                   # mm      # measured
-railbuttons_lower=305                    # mm      # measured
+railbuttons_upper=1646                  # mm      # measured
+railbuttons_lower=305                   # mm      # measured
 
 # tailcone
-tailcone_diameter=108                 # mm      # measured
-tailcone_length=245                   # mm      # measured
-tailcone_cylindrical_height=35        # mm      # measured
-
-# rocket
-rocket_wall_thickness=1.4                # mm      # measured
-rocket_diameter=132.8               # mm      # measured
+tailcone_diameter=108                   # mm      # measured
+tailcone_length=245                     # mm      # measured
+tailcone_cylindrical_height=35          # mm      # measured
 
 # fins_
 fins_name=Biconvex
 fins_amount=4
-fins_root_chord=250               # mm      # measured
-fins_tip_chord=55                 # mm      # measured
-fins_span=110                     # mm      # measured
-fins_sweep_length=193             # mm      # measured
-fins_position=250                 # mm      # measured
+fins_root_chord=250                     # mm      # measured
+fins_tip_chord=55                       # mm      # measured
+fins_span=110                           # mm      # measured
+fins_sweep_length=193                   # mm      # measured
+fins_position=250                       # mm      # measured
 fins_shape_points=((0,0),(0.250,-0.012),(0.250, 0.108),(0.195, 0.108),(0,0))          # m     # measured
 
 # parachutes
 # main
-main_cd_s=6.911503837897546                     # calculated
-main_trigger=450              # m               # preset
-main_sampling_rate=105        # hz              # preset
-main_lag=4                    # s               # measured
-main_noise=(0, 8.3, 0.5)       # (pa, pa, pa)    # preset
+main_cd_s=6.911503837897546             # calculated
+main_trigger=450                    # m # preset
 
 # drogue_
-drogue_cd_s=0.336875
-drogue_trigger=apogee         # m               # preset
-drogue_sampling_rate=105        # hz              # preset
-drogue_lag=1                    # s               # measured
-drogue_noise=(0, 8.3, 0.5)       # (pa, pa, pa)    # preset
+drogue_cd_s=0.336875                    # calculated
+drogue_trigger=apogee                   # preset
 
 # flight
 flight_rail_length=11                   # m       #Preset
 flight_inclination=84                   # °       #Preset
 flight_heading=184                      # °       #Preset
-flight_terminate_on_apogee=False
