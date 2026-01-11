@@ -1,10 +1,7 @@
 # Rocket configuration data
 # env_config
-envType=Reanalysis
-date=(2025, 10, 12, 17, 00, 00)         # yyyy, mm, dd, hh, mm, ss    # preset
-latitude=39.232465                      # Launch latitude             # preset
-longitude=-8.172108                     # Launch longitude            # preset
-timezone=Europe/Lisbon                  # GMT+1                       # preset
+envType=Forecast,Reanalysis
+#date=(2026, 1, 12, 17, 00, 00)         # yyyy, mm, dd, hh, mm, ss    # preset
 
 # motor_config
 holddown_time=1.1                       # s       # preset
