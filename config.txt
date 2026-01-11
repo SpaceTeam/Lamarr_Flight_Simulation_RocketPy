@@ -1,7 +1,7 @@
 # Rocket configuration data
 # env_config
-envType=Forecast,Reanalysis
-#date=(2026, 1, 12, 17, 00, 00)         # yyyy, mm, dd, hh, mm, ss    # preset
+environment_envType=Forecast,Reanalysis
+#environment_date=(2026, 1, 12, 17, 00, 00)         # yyyy, mm, dd, hh, mm, ss    # preset
 
 # motor_config
 holddown_time=1.1                       # s       # preset
