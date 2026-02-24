@@ -1,10 +1,12 @@
 # Rocket configuration data
 # env_config
-environment_envType=Forecast,Reanalysis
+environment_envType=Reanalysis
 #environment_date=(2026, 1, 12, 17, 00, 00)         # yyyy, mm, dd, hh, mm, ss    # preset
 
 # motor_config
 holddown_time=1.1                       # s       # preset
+
+engine_type=liquid
 
 # nitrogen_tank
 nitrogen_tank_length=235                # mm      # measured
@@ -35,7 +37,7 @@ nozzle_position=-40                     # mm      # measured
 thrust=thrust_euroc_launch.csv,thrust_08_25.csv,thrust.csv               # N       # measured
 
 # rocket_config
-rocket_weight=16200                     # g       # weighed dry mass
+rocket_dry_mass=16200                     # g       # weighed dry mass
 rocket_length=3707                      # mm      # measured
 rocket_CG=1813                          # mm      # measured
 rocket_moment_of_intertia_Z=0.0255      # kg*m^2  # calculated
@@ -54,7 +56,7 @@ railbuttons_lower=305                   # mm      # measured
 # tailcone
 tailcone_diameter=108                   # mm      # measured
 tailcone_length=245                     # mm      # measured
-tailcone_cylindrical_height=35          # mm      # measured
+tailcone_cylindrical_length=35          # mm      # measured
 
 # fins_
 fins_name=Biconvex
