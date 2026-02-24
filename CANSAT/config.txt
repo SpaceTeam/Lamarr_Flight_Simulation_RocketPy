@@ -2,8 +2,8 @@
 # Rocket configuration data
 # env_config
 environment_envType=Reanalysis
-#environment_latitude=48.399112,               # Launch latitude             # preset
-#environment_longitude=13.452635,              # Launch longitude            # preset
+#environment_latitude=48.399112               # Launch latitude             # preset
+#environment_longitude=13.452635              # Launch longitude            # preset
 #environment_max_expected_height=2000          # m                           # preset
 #environment_date=(2026, 1, 12, 17, 00, 00)         # yyyy, mm, dd, hh, mm, ss    # preset
 
@@ -21,7 +21,7 @@ thrust=thrust.csv               # N       # measured
 
 
 # rocket_config
-rocket_length=2090           #(230+760+30+470+600),   # m   # measured
+rocket_length=2090           #(230+760+30+470+600)   # m   # measured
 rocket_diameter=152                 # m   # measured
 rocket_dry_mass=16000                # kg  # measured
 rocket_CG=1180  # m   # measured      #FROM TIP!
@@ -61,10 +61,11 @@ drogue_trigger=apogee                   # preset
 # flight
 flight_rail_length=11                   # m       # preset
 flight_inclination=84                   # °       # preset
-flight_heading=184                      # °       # preset
+flight_heading=0..360:20                # °       # preset
 
-payload_parachute_cd_s=0.1              # calculated
-payload_parachute_trigger=200           # m        # preset
+parachute_payload_cd_s=0.1..1:0.1              # calculated
+parachute_payload_trigger=apogee        # m        # preset
 payload_diameter=66                     # mm       # preset
-payload_mass=1800                       # g        # preset
+payload_mass_total=1800                 # g        # preset
+payload_mass=300..350:10                # g        # preset
 payload_length=115                      # mm       # preset
