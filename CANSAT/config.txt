@@ -1,71 +1,71 @@
 # CANSAT
 # Rocket configuration data
 # env_config
-environment_envType=Reanalysis
-#environment_latitude=48.399112               # Launch latitude             # preset
-#environment_longitude=13.452635              # Launch longitude            # preset
-#environment_max_expected_height=2000          # m                           # preset
-#environment_date=(2026, 1, 12, 17, 00, 00)         # yyyy, mm, dd, hh, mm, ss    # preset
+environment_envType=Forecast
+environment_latitude=48.235693               # Launch latitude             # preset
+environment_longitude=13.271437              # Launch longitude            # preset
+environment_max_expected_height=2000         # m                           # preset
+environment_date=(2026, 2, 28, 12, 00, 00)   # yyyy, mm, dd, hh, mm, ss    # preset
+environment_elevation=170
 
 engine_type=solid
 
 motor_name=K700W
-motor_total_mass=2035       # g      # preset
-motor_propellant_mass=1291  # g      # preset
-motor_diameter=54          # g      # preset
-motor_length=568            # mm       # preset
-motor_burn_time=3.3               # s       # preset
+motor_total_mass=2035                   # g       # preset
+motor_propellant_mass=1291              # g       # preset
+motor_diameter=54                       # mm      # preset
+motor_length=568                        # mm      # preset
+motor_burn_time=3.3                     # s       # preset
 
 
-thrust=thrust.csv               # N       # measured
+thrust=thrust.csv                       # N       # measured
 
 
 # rocket_config
-rocket_length=2090           #(230+760+30+470+600)   # m   # measured
-rocket_diameter=152                 # m   # measured
-rocket_dry_mass=16000                # kg  # measured
-rocket_CG=1180  # m   # measured      #FROM TIP!
+rocket_length=2090                      # mm      # measured   #(230+760+30+470+600)
+rocket_diameter=152                     # mm      # measured
+rocket_dry_mass=16000                   # kg      # measured
+rocket_CG=1180                          # mm      # measured      #FROM TIP!
 
 rocket_moment_of_intertia_Z=0.0255      # kg*m^2  # calculated
 rocket_moment_of_intertia_XY=16.8       # kg*m^2  # calculated
-rocket_wall_thickness=1.4               # mm      # measured
 
 # nosecone
-nosecone_length=230                # m   # measured
-nosecone_kind=elliptical
+nosecone_length=230                     # mm      # measured
+nosecone_kind=elliptical                          # preset
 
 # railbuttons
-railbuttons_upper=1500                    # mm   # measured
-railbuttons_lower=500                     # mm   # measured
+railbuttons_upper=1500                  # mm      # measured
+railbuttons_lower=500                   # mm      # measured
 
 # tailcone
-tailcone_diameter=150                  # mm      # measured
-tailcone_length=10                     # mm      # measured
+tailcone_diameter=150                   # mm      # measured
+tailcone_length=10                      # mm      # measured
 
 
-# fins_
-fins_name=Biconvex
-fins_amount=3
+# fins
+fins_amount=3                                     # preset
 fins_position=465                       # mm      # measured
 fins_shape_points=((0,0),(0.145, 0.155),(0.510, 0.155),(0.510, 0.100),(0.410, 0))          # m     # measured
 
 # parachutes
 # main
-main_cd_s=6.911503837897546             # calculated
-main_trigger=150                    # m # preset
+main_cd_s=6.911503837897546                       # calculated
+main_trigger=150                        # m       # preset
 
 # drogue_
-drogue_cd_s=0.336875                    # calculated
-drogue_trigger=apogee                   # preset
+drogue_cd_s=0.336875                              # calculated
+drogue_trigger=apogee                             # preset
 
 # flight
-flight_rail_length=11                   # m       # preset
-flight_inclination=84                   # °       # preset
-flight_heading=0..360:20                # °       # preset
+flight_rail_length=6                    # m       # preset
+flight_inclination=86..89                   # °       # preset      # 0 = horizontal, 90 = vertical
+flight_heading=0..350:10                # °       # preset      # 0 = north
 
-parachute_payload_cd_s=0.1..1:0.1              # calculated
-parachute_payload_trigger=apogee        # m        # preset
-payload_diameter=66                     # mm       # preset
-payload_mass_total=1800                 # g        # preset
+parachute_payload_cd_s=0.1..1:0.1                  # calculated
+parachute_payload_trigger=apogee                   # preset
+
+payload_mass_total=1800                 # g        # preset (300*6)
 payload_mass=300..350:10                # g        # preset
+payload_diameter=66                     # mm       # preset
 payload_length=115                      # mm       # preset
