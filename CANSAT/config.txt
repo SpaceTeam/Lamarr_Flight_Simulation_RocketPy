@@ -56,10 +56,11 @@ main_trigger=150                        # m       # preset
 # drogue_
 drogue_cd_s=0.336875                              # calculated
 drogue_trigger=apogee                             # preset
+drogue_lag=0
 
 # flight
 flight_rail_length=6                    # m       # preset
-flight_inclination=86..89                   # °       # preset      # 0 = horizontal, 90 = vertical
+flight_inclination=90                   # °       # preset      # 0 = horizontal, 90 = vertical
 flight_heading=0..350:10                # °       # preset      # 0 = north
 
 parachute_payload_cd_s=0.1..1:0.1                  # calculated
