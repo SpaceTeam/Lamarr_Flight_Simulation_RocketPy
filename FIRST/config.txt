@@ -1,0 +1,60 @@
+# FIRST
+# Rocket configuration data
+# env_config
+environment_envType=Forecast
+environment_latitude=48.24114                # Launch latitude             # preset
+environment_longitude=13.26570               # Launch longitude            # preset
+environment_max_expected_height=1000         # m                           # preset
+environment_date=(2026, 3, 08, 12, 00, 00)   # yyyy, mm, dd, hh, mm, ss    # preset
+environment_elevation=170
+
+engine_type=solid
+
+motor_name=H238T
+motor_total_mass=196                    # g       # preset
+motor_propellant_mass=83                # g       # preset
+motor_diameter=29                       # mm      # preset
+motor_length=194                        # mm      # preset
+motor_burn_time=1                       # s       # preset
+
+
+thrust=thrust.csv                       # N       # measured
+
+
+# rocket_config
+rocket_length=932                       # mm      # measured   #(230+760+30+470+600)
+rocket_diameter=62                      # mm      # measured
+rocket_dry_mass=913                     # kg      # measured
+rocket_CG=515                           # mm      # measured      #FROM TIP!
+
+# nosecone
+nosecone_length=250                     # mm      # measured
+nosecone_kind=von karman                          # preset
+
+# railbuttons
+railbuttons_upper=0.520                 # mm      # measured
+railbuttons_lower=0.020                 # mm      # measured
+
+# tailcone
+tailcone_diameter=55                    # mm      # measured
+tailcone_length=22                      # mm      # measured
+
+
+# fins
+fins_amount=3                                     # preset
+fins_position=177                       # mm      # measured
+fins_shape_points=((0,0),(0.0281, 0.00618),(0.0529, 0.0129),(0.0782, 0.0224),(0.0979, 0.0309),(0.119, 0.0416),(0.135, 0.0517),(0.148, 0.0568),(0.157, 0.059),(0.176, 0.059),(0.178, 0.0556),(0.181, 0.0432),(0.182, 0.0321),(0.182, 0.0169),(0.177, 0),(0, 0))          # m     # measured
+
+# parachutes
+# main
+main_cd_s=0.14283                                 # calculated
+main_trigger=apogee                     # m       # preset
+
+# flight
+flight_rail_length=4                    # m       # preset
+flight_inclination=85                   # °       # preset      # 0 = horizontal, 90 = vertical
+flight_heading=0                        # °       # preset      # 0 = north, 90 = east
+flight_terminate_on_apogee=False
+
+
+output_level=2
