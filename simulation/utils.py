@@ -5,7 +5,14 @@ import matplotlib.pyplot as plt
 
 from math import prod, pi
 from matplotlib.path import Path
+from rocketpy import CompareFlights
 from matplotlib.patches import Polygon
+from IPython.display import Markdown, display
+
+# print in markdown
+def printmd(string):
+    display(Markdown(string))
+
 
 # returns a range of floats
 def float_range(start, stop, step=1):
@@ -66,12 +73,21 @@ def parse_value(value_str):
                 n = float(item)
                 parsed_items.append(int(n) if n.is_integer() else n)
             except ValueError:
-                parsed_items.append(item)
+                if value_str == "False":
+                    parsed_items.append(False)
+                elif value_str == "True":
+                    parsed_items.append(True)
+                else:
+                    parsed_items.append(item)
         return parsed_items
 
     # Otherwise a constant (single value)
     try:
         # Convert to float or int where possible
+        if value_str == "False":
+            return False
+        if value_str == "True":
+            return True
         n = float(value_str)
         return int(n) if n.is_integer() else n
     except ValueError:
@@ -188,11 +204,14 @@ def register(name, objects, constants, variables):
             - If length == 1 → stored as a constant.
             - If length > 1 → stored as a variable.
     """
-    if len(objects) == 1:
-        constants[name] = objects[0]
+    if isinstance(objects, (list, tuple)) and not isinstance(objects, str):
+        if len(objects) == 1:
+            constants[name] = objects[0]
+        else:
+            variables[name] = objects
     else:
-        variables[name] = objects
-    
+        constants[name] = objects
+
     return constants, variables
 
 def lookup(name, constants, variables):
@@ -433,7 +452,7 @@ def plot_flights(ax, flight_groups):
 # ===============================
 # Function to plot everything together
 # ===============================
-def plot_all(exclusion_zones=None, buffer_zones=None, flight_groups=None):
+def plot_all(project, name, exclusion_zones=None, buffer_zones=None, flight_groups=None):
     fig, ax = plt.subplots()
 
     if exclusion_zones:
@@ -443,8 +462,9 @@ def plot_all(exclusion_zones=None, buffer_zones=None, flight_groups=None):
 
     if flight_groups:
         plot_flights(ax, flight_groups)
-
-    plt.show()
+    
+    fig.savefig(f"{project}/plots/{name}.png", dpi=300, bbox_inches="tight")
+    #plt.show()
 
 def is_in_exclusion_zone(coords, zones_dict):
     """
@@ -470,3 +490,45 @@ def is_in_exclusion_zone(coords, zones_dict):
         inside_mask |= path.contains_points(points)
 
     return inside_mask
+
+
+def ensure_list(obj):
+    if obj is None:
+        return []
+    if isinstance(obj, (list, tuple, set)):
+        return list(obj)
+    return [obj]
+
+def get_unsafe_headings(flights, zones):
+    coords  = [(f.x_impact, f.y_impact) for f in flights]
+
+    # ===============================
+    # Check which impacts are in exclusion zones
+    # ===============================
+    impacts  = is_in_exclusion_zone(coords, zones)
+
+    # ===============================
+    # Find headings of rockets in exclusion zones
+    # ===============================
+    headings_in_zone = list({flights[i].heading 
+                            for i, in_zone in enumerate(impacts) if in_zone})
+
+    return headings_in_zone
+
+
+
+
+def draw_initial_solutions(constants, variables):
+    legend = False
+    all_flights = lookup("all_flights", constants, variables)[0]
+
+    #for flight in all_flights:
+    #    print(flight.name)
+        # print(flight._meta)
+    comparison_normal = CompareFlights(all_flights)
+    comparison_normal.trajectories_3d(legend=legend, filename = "3d.png")
+    comparison_normal.trajectories_2d(legend=legend, filename = "2d_xy.png", plane = "xy")
+    comparison_normal.trajectories_2d(legend=legend, filename = "2d_xz.png", plane = "xz")
+    comparison_normal.trajectories_2d(legend=legend, filename = "2d_yz.png", plane = "yz")
+
+

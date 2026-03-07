@@ -10,6 +10,7 @@ from simulation.utils import *
 DEBUG = False
 
 def create_environment(constants, variables):
+    print("Creating environment...")
     #Ponte de Sor: 39.12368, -8.03333
     #EUROC: 09.-15.10.2025
     #possible launch date: 11.10.2025
@@ -86,17 +87,17 @@ def create_environment(constants, variables):
         # TODO: add custom env variables to config
         for env_vals in generate_combinations(parameter_env, constants, variables):
             if "Custom" in env_vals["environment_envType"]:
-                # Environment based on Custom Data
+                # Environment based on custom data
                 envCustom = Environment(max_expected_height=env_vals["environment_max_expected_height"])
                 envCustom.set_location(latitude=env_vals["environment_latitude"], longitude=env_vals["environment_longitude"])
-                envCustom.set_atmospheric_model(type = "custom_atmosphere", temperature = 30 + 273.15, wind_u = lambda t:10 + (t /1000)**2, wind_v = 0)
+                envCustom.set_atmospheric_model(type = "custom_atmosphere", wind_u = env_vals["environment_wind_u"], wind_v =  env_vals["environment_wind_v"])
                 # envCustom.info()
-                environmentsCustom.append(envCustom)
                 attach_meta(envCustom, {
                     k: env_vals[k]
                     for k in variables
                     if k in env_vals
                 })
+                environmentsCustom.append(envCustom)
         constants, variables = register("envCustom", environmentsCustom, constants, variables)
 
     if "Reanalysis" in enabled_env_types:
@@ -112,12 +113,12 @@ def create_environment(constants, variables):
                     file="euroc_weather.nc",
                     dictionary="ECMWF",
                 )
+                # envReanalysis.info()
                 attach_meta(envReanalysis, {
                     k: env_vals[k]
                     for k in variables
                     if k in env_vals
                 })
-                # envReanalysis.info()
                 environmentsReanalysis.append(envReanalysis)
         constants, variables = register("envReanalysis", environmentsReanalysis, constants, variables)
     
@@ -125,6 +126,7 @@ def create_environment(constants, variables):
 
 
 def create_engine(constants, variables):
+    print("Creating engine...")
     parameter_engine = []
     required = {"type"}
     fill_parameters(parameter_engine, "engine_", constants, variables)
@@ -141,6 +143,7 @@ def create_engine(constants, variables):
         sys.exit(104)
 
 def create_liquid_engine(constants, variables):
+  print("Creating liquid engine...")
   project, _ = lookup("project", constants, variables)
 
   parameter_motor = []
@@ -297,12 +300,13 @@ def create_liquid_engine(constants, variables):
         if k in motor_vals
     })
     motors.append(skuld)
-  if DEBUG: skuld.draw()
+  if DEBUG: skuld.draw(filename="plots/liquid_engine.png")
   return register("motor", motors, constants, variables)
 
 
 
 def create_solid_engine(constants, variables):
+  print("Creating solid engine...")
   project, _ = lookup("project", constants, variables)
   parameter_motor = []
 
@@ -363,11 +367,12 @@ def create_solid_engine(constants, variables):
         if k in motor_vals
     })
     motors.append(motor)
-  if DEBUG: motor.draw()
+  if DEBUG: motor.draw(filename="plots/solid_engine.png")
   return register("motor", motors, constants, variables)
 
 
 def create_nosecone(constants, variables):
+    print("Creating nosecone...")
     parameter_nosecone = []
     required = ["length"]
     defaults = {"nosecone_kind":"von karman"}
@@ -392,11 +397,12 @@ def create_nosecone(constants, variables):
             if k in nosecone_vals
         })
         nosecones.append(nosecone)
-    if DEBUG: nosecone.draw()
+    if DEBUG: nosecone.draw(filename="plots/nosecone.png")
     return register("nosecone", nosecones, constants, variables)
 
 
 def create_tailcone(constants, variables):
+    print("Creating tailcone...")
     parameter_tailcone = []
     required = ["diameter", "length"]
     defaults = {"tailcone_cylindrical_length":0}
@@ -425,6 +431,7 @@ def create_tailcone(constants, variables):
     return register("tailcone", tailcones, constants, variables)
 
 def create_fins(constants, variables):
+    print("Creating fins...")
     parameter_fins = []
 
     defaults = {"fins_amount" : 4, "fins_name":"fins"}
@@ -485,17 +492,23 @@ def create_fins(constants, variables):
 
     if "fins_shape_points" in parameter_fins:
         constants, variables = register("fin_set", fins, constants, variables)
-        if DEBUG: fin_set.draw()
+        if DEBUG: fin_set.draw(filename="plots/fin_set.png")
         if DEBUG: print(fins)
     else:
         constants, variables = register("fin_set", trapezoidal_fins, constants, variables)
-        if DEBUG: trapezoidal_fin_set.draw()
+        if DEBUG: trapezoidal_fin_set.draw(filename="plots/trapezoidal_fin_set.png")
         if DEBUG: print(trapezoidal_fins)
     return constants, variables
 
 def create_parachutes(constants, variables):
-    # TODO: make drogue optional
+    print("Creating parachutes...")
 
+    has_drogue = any(
+        k.startswith("drogue_") for k in constants
+    ) or any(
+        k.startswith("drogue_") for k in variables
+    )
+    
     parameter_parachutes = []
 
     required=[
@@ -504,18 +517,21 @@ def create_parachutes(constants, variables):
     ]
 
     defaults = {
-        "drogue_sampling_rate": 105,        # hz              # preset
-        "drogue_lag": 1,                    # s               # measured
-        "drogue_noise": (0, 8.3, 0.5),       # (pa, pa, pa)    # preset
-        "main_sampling_rate": 105,        # hz              # preset
-        "main_lag": 4,                    # s               # measured
-        "main_noise": (0, 8.3, 0.5)        # (pa, pa, pa)    # preset
+        "main_sampling_rate": 105,           # hz              # preset
+        "main_lag": 4,                       # s               # measured
+        "main_noise": (0, 8.3, 0.5)          # (pa, pa, pa)    # preset
     }
+    if has_drogue:
+        defaults.update({
+            "drogue_sampling_rate": 105,         # hz              # preset
+            "drogue_lag": 1,                     # s               # measured
+            "drogue_noise": (0, 8.3, 0.5),       # (pa, pa, pa)    # preset
+        })
 
-    fill_parameters(parameter_parachutes, "drogue_", constants, variables)
+    if has_drogue: fill_parameters(parameter_parachutes, "drogue_", constants, variables)
     fill_parameters(parameter_parachutes, "main_", constants, variables)
 
-    check_required(parameter_parachutes, required, "drogue")
+    if has_drogue: check_required(parameter_parachutes, required, "drogue")
     check_required(parameter_parachutes, required, "main")
 
     add_defaults(parameter_parachutes, defaults, constants, variables)
@@ -535,25 +551,26 @@ def create_parachutes(constants, variables):
             lag = parachute_vals["main_lag"],                     # s
             noise = parachute_vals["main_noise"],                 # (pa, pa, pa)
         )
-
-        parachute_list[1] = Parachute(
-            name = "drogue",
-            cd_s = parachute_vals["drogue_cd_s"],
-            trigger = parachute_vals["drogue_trigger"],             # m
-            sampling_rate = parachute_vals["drogue_sampling_rate"], # hz
-            lag = parachute_vals["drogue_lag"],                     # s
-            noise = parachute_vals["drogue_noise"],                 # (pa, pa, pa)
-        )
         attach_meta(parachute_list[0], {
             k: parachute_vals[k]
             for k in variables
             if k in parachute_vals
         })
-        attach_meta(parachute_list[1], {
-            k: parachute_vals[k]
-            for k in variables
-            if k in parachute_vals
-        })
+
+        if has_drogue:
+            parachute_list[1] = Parachute(
+                name = "drogue",
+                cd_s = parachute_vals["drogue_cd_s"],
+                trigger = parachute_vals["drogue_trigger"],             # m
+                sampling_rate = parachute_vals["drogue_sampling_rate"], # hz
+                lag = parachute_vals["drogue_lag"],                     # s
+                noise = parachute_vals["drogue_noise"],                 # (pa, pa, pa)
+            )
+            attach_meta(parachute_list[1], {
+                k: parachute_vals[k]
+                for k in variables
+                if k in parachute_vals
+            })
         parachutes.append(parachute_list)
     return register("parachutes", parachutes, constants, variables)
 
@@ -567,6 +584,7 @@ def create_rocket_parts(constants, variables):
     return constants, variables
 
 def create_rocket(constants, variables):
+    print("Creating rocket...")
     constants, variables = create_rocket_parts(constants, variables)
     project, _ = lookup("project", constants, variables)
     # add MOI to defaults or required
@@ -579,7 +597,11 @@ def create_rocket(constants, variables):
         "CG",
         "length"
     ]
-    defaults={"nozzle_position":0}
+    defaults={
+        "nozzle_position":0,
+        "rocket_moment_of_intertia_XY":0.1,
+        "rocket_moment_of_intertia_Z":1
+    }
 
     fill_parameters(parameter_rockets, "rocket_", constants, variables)
     fill_parameters(parameter_rockets, "railbuttons_", constants, variables)
@@ -635,12 +657,13 @@ def create_rocket(constants, variables):
             "buttons": "black",
             "line_width": 2.0,
         }
-        rocket.draw(plane = 'xz', vis_args = vis_args)
+        rocket.draw(plane = 'xz', vis_args = vis_args, filename="plots/rocket.png")
     
     return register("rocket", rockets, constants, variables)
 
 
 def create_flight(constants, variables):
+    print("Creating flights...")
     enabled_env_types, _ = lookup("enabled_env_types", constants, variables)
 
     if isinstance(enabled_env_types, str):
@@ -657,7 +680,7 @@ def create_flight(constants, variables):
     ]
 
     defaults = {
-    "flight_terminate_on_apogee" : True
+        "flight_terminate_on_apogee" : True
     }
 
     fill_parameters(parameter_flights, "flight_", constants, variables)
@@ -793,9 +816,9 @@ def create_flight(constants, variables):
         if i % step == 0 or i == total:
             print(f"{i / total:.0%}")
     
-    constants, variables = register("normal_flight", flights_normal, constants, variables)
-    constants, variables = register("forecast_flight", flights_forecast, constants, variables)
-    constants, variables = register("custom_flight", flights_custom, constants, variables)
-    constants, variables = register("reanalysis_flight", flights_reanalysis, constants, variables)
+    if len(flights_normal) > 0:constants, variables = register("normal_flight", flights_normal, constants, variables)
+    if len(flights_forecast) > 0:constants, variables = register("forecast_flight", flights_forecast, constants, variables)
+    if len(flights_custom) > 0:constants, variables = register("custom_flight", flights_custom, constants, variables)
+    if len(flights_reanalysis) > 0:constants, variables = register("reanalysis_flight", flights_reanalysis, constants, variables)
     #flight_forecast.all_info()
     return constants, variables

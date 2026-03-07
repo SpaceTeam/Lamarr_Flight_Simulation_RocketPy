@@ -5,7 +5,7 @@ environment_envType=Forecast
 environment_latitude=48.235693               # Launch latitude             # preset
 environment_longitude=13.271437              # Launch longitude            # preset
 environment_max_expected_height=2000         # m                           # preset
-environment_date=(2026, 2, 28, 12, 00, 00)   # yyyy, mm, dd, hh, mm, ss    # preset
+environment_date=(2026, 3, 08, 12, 00, 00)   # yyyy, mm, dd, hh, mm, ss    # preset
 environment_elevation=170
 
 engine_type=solid
@@ -60,13 +60,13 @@ drogue_lag=0
 
 # flight
 flight_rail_length=6                    # m       # preset
-flight_inclination=90                   # °       # preset      # 0 = horizontal, 90 = vertical
-flight_heading=0..350:10                # °       # preset      # 0 = north
+flight_inclination=84..88:2             # °       # preset      # 0 = horizontal, 90 = vertical
+flight_heading=0..350:10                # °       # preset      # 0 = north, 90 = east
 
-parachute_payload_cd_s=0.1..1:0.1                  # calculated
-parachute_payload_trigger=apogee                   # preset
+parachute_payload_cd_s=0.05..0.08:0.01            # calculated    # cd=0.62, Amin=0.08 m^2, Amax=0.14 m^2
+parachute_payload_trigger=apogee                  # preset
 
-payload_mass_total=1800                 # g        # preset (300*6)
-payload_mass=300..350:10                # g        # preset
-payload_diameter=66                     # mm       # preset
-payload_length=115                      # mm       # preset
+payload_mass_total=1800                 # g       # preset (300g * 6)
+payload_mass=300..350:10                # g       # preset
+payload_diameter=66                     # mm      # preset
+payload_length=115                      # mm      # preset

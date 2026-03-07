@@ -7,6 +7,7 @@ DEBUG = False
 
 # w_p = without payload
 def create_rocket_without_payload(constants, variables):
+    print("Creating rocket without payload...")
     parameter_rockets_w_p = []
     required=[
         "payload_mass_total", 
@@ -51,15 +52,18 @@ def create_rocket_without_payload(constants, variables):
 # w_p = without payload
 
 def create_flight_without_payload(constants, variables):
-    all_flights = (
-        lookup("normal_flight", constants, variables)[0] +
-        lookup("forecast_flight", constants, variables)[0] +
-        lookup("custom_flight", constants, variables)[0] +
-        lookup("reanalysis_flight", constants, variables)[0]
-    )
+    print("Creating flight without payload...")
+    all_flights = []
+
+    for key in ["normal_flight", "forecast_flight", "custom_flight", "reanalysis_flight"]:
+        try:
+            flights = lookup(key, constants, variables)[0]
+        except KeyError:
+            continue
+
+        all_flights.extend(ensure_list(flights))
 
     register("all_flights", all_flights, constants, variables)
-
     
     parameter_flight_w_p = []
     
@@ -126,18 +130,29 @@ def create_flight_without_payload(constants, variables):
             for k in variables
             if k in flight_w_p_vals
         })
-        flights_w_p.append(flight_w_p) 
-        flights_w_p_no_main.append(flight_w_p_no_main) 
-        flights_w_p_ballistic.append(flight_w_p_ballistic)      
+
+
+        # First calculate if a flight is safe, then add it to the list, to reduce the amount of payload flights to be calculated
+        if (not is_in_exclusion_zone([(flight_w_p.x_impact, flight_w_p.y_impact)], lookup("zones", constants, variables)[0])
+            and not is_in_exclusion_zone([(flight_w_p_no_main.x_impact, flight_w_p_no_main.y_impact)], lookup("zones", constants, variables)[0])
+                and not is_in_exclusion_zone([(flight_w_p_ballistic.x_impact, flight_w_p_ballistic.y_impact)], lookup("zones", constants, variables)[0])):
+            flights_w_p.append(flight_w_p) 
+            flights_w_p_no_main.append(flight_w_p_no_main) 
+            flights_w_p_ballistic.append(flight_w_p_ballistic)
+        else:
+            all_flights.remove(flight_w_p._meta["all_flights"]) 
+
+
         if i % step == 0 or i == total:
             print(f"{i / total:.0%}")
     constants, variables = register("flight_without_payload", flights_w_p, constants, variables)
     constants, variables = register("flight_without_payload_no_main", flights_w_p_no_main, constants, variables)
     constants, variables = register("flight_without_payload_ballistic", flights_w_p_ballistic, constants, variables)
+    constants, variables = register("all_flights_safe", all_flights, constants, variables)
     return constants, variables
-# TODO: first calculate all the safe headings, then begin to calculate payload flights based on that
 
 def create_payload_parachute(constants, variables):
+    print("Creating payload parachute...")
     parameter_payload_parachute = []
 
     required=[
@@ -180,6 +195,7 @@ def create_payload_parachute(constants, variables):
 
 
 def create_payload(constants, variables):
+    print("Creating payload...")
     project = lookup("project", constants, variables)[0]
     constants, variables = create_payload_parachute(constants, variables)
     parameter_payload = []
@@ -214,8 +230,6 @@ def create_payload(constants, variables):
             coordinate_system_orientation = "tail_to_nose"
         )
 
-        payload["no_chute"] = copy.deepcopy(payload["nominal"])
-        
         payload["nominal"].parachutes = list(payload_vals["payload_parachute"].values())
 
 
@@ -225,24 +239,21 @@ def create_payload(constants, variables):
             for k in variables
             if k in payload_vals
         })
-        attach_meta(payload["no_chute"], {
-            k: payload_vals[k]
-            for k in variables
-            if k in payload_vals
-        })
+
         payloads.append(payload)
     return register("payload", payloads, constants, variables)
 
 
 def create_payload_flight(constants, variables):
+    print("Creating payload flight...")
+
     parameter_payload_flights = []
-    fill_parameters_exact(parameter_payload_flights, "all_flights", constants, variables)
+    fill_parameters_exact(parameter_payload_flights, "all_flights_safe", constants, variables)
     fill_parameters_exact(parameter_payload_flights, "payload", constants, variables)
 
     if DEBUG: print(parameter_payload_flights)
 
     flights_payload = []
-    flights_payload_no_chute = []
 
     total = count_combinations(parameter_payload_flights, constants, variables)
     step = max(1, total // 10)
@@ -251,25 +262,13 @@ def create_payload_flight(constants, variables):
     for i, flight_payload_vals in enumerate(generate_combinations(parameter_payload_flights, constants, variables), start=1):
         flight_payload = Flight(
             rocket        = flight_payload_vals["payload"]["nominal"],
-            environment   = flight_payload_vals["all_flights"].env,
-            rail_length   = flight_payload_vals["all_flights"].rail_length,
-            inclination   = flight_payload_vals["all_flights"].inclination,
-            heading       = flight_payload_vals["all_flights"].heading,
+            environment   = flight_payload_vals["all_flights_safe"].env,
+            rail_length   = flight_payload_vals["all_flights_safe"].rail_length,
+            inclination   = flight_payload_vals["all_flights_safe"].inclination,
+            heading       = flight_payload_vals["all_flights_safe"].heading,
             terminate_on_apogee = False,
-            initial_solution = flight_payload_vals["all_flights"],
+            initial_solution = flight_payload_vals["all_flights_safe"],
             name          = "Payload"
-        )
-        
-
-        flight_payload_no_chute = Flight(
-            rocket        = flight_payload_vals["payload"]["no_chute"],
-            environment   = flight_payload_vals["all_flights"].env,
-            rail_length   = flight_payload_vals["all_flights"].rail_length,
-            inclination   = flight_payload_vals["all_flights"].inclination,
-            heading       = flight_payload_vals["all_flights"].heading,
-            terminate_on_apogee = False,
-            initial_solution = flight_payload_vals["all_flights"],
-            name          = "Payload no chute"
         )
 
         attach_meta(flight_payload, {
@@ -277,15 +276,9 @@ def create_payload_flight(constants, variables):
             for k in variables
             if k in flight_payload_vals
         })
-        attach_meta(flight_payload_no_chute, {
-            k: flight_payload_vals[k]
-            for k in variables
-            if k in flight_payload_vals
-        })
-        flights_payload.append(flight_payload) 
-        flights_payload_no_chute.append(flight_payload_no_chute)     
+
+        flights_payload.append(flight_payload)  
         if i % step == 0 or i == total:
             print(f"{i / total:.0%}")
     constants, variables = register("flight_payload", flights_payload, constants, variables)
-    constants, variables = register("flight_payload_no_chute", flights_payload_no_chute, constants, variables)
     return constants, variables
