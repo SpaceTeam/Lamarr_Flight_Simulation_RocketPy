@@ -449,10 +449,30 @@ def plot_flights(ax, flight_groups):
     ax.scatter(0, 0, color="black", marker="x", label="launch rail")
     ax.legend()
 
-# ===============================
-# Function to plot everything together
-# ===============================
-def plot_all(project, name, exclusion_zones=None, buffer_zones=None, flight_groups=None):
+
+
+def plot_safe_flights(project, exclusion_zones, buffer_zones,
+                      flight_groups, heading=None, inclination=None):
+
+    filtered_groups = {}
+
+    for name, (flights, color) in flight_groups.items():
+        filtered = flights
+
+        if heading is not None:
+            filtered = [f for f in filtered if f.heading == heading]
+
+        if inclination is not None:
+            filtered = [f for f in filtered if f.inclination == inclination]
+
+        filtered_groups[name] = (filtered, color)
+
+    plot_name = "safe_flights"
+    if heading is not None:
+        plot_name += f"_heading_{heading}"
+    if inclination is not None:
+        plot_name += f"_inclination_{inclination}"
+
     fig, ax = plt.subplots()
 
     if exclusion_zones:
@@ -461,7 +481,7 @@ def plot_all(project, name, exclusion_zones=None, buffer_zones=None, flight_grou
         plot_zones(ax, buffer_zones, color="orange")
 
     if flight_groups:
-        plot_flights(ax, flight_groups)
+        plot_flights(ax, filtered_groups)
     
     fig.savefig(f"{project}/plots/{name}.png", dpi=300, bbox_inches="tight")
     #plt.show()
