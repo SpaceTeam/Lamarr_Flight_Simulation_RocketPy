@@ -95,6 +95,7 @@ def parse_value(value_str):
 
 
 # main function for parsing the config file
+# TODO Error handling for = missing in config.txt
 def parse_config(path):
     constants = {}
     variables = {}

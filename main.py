@@ -3,7 +3,6 @@ from simulation.simulation import *
 from simulation.deployable_payload import *
 
 project = "LAMARR"
-# TODO Error handling for = missing in config.txt
 constants, variables = parse_config(project+"/config.txt")
 register("project", project, constants, variables)
 

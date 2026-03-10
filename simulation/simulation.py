@@ -84,7 +84,7 @@ def create_environment(constants, variables):
         constants, variables = register("envNormal", environmentsNormal, constants, variables)
 
     if "Custom" in enabled_env_types:
-        # TODO: add custom env variables to config
+        # TODO: add/test more custom env variables to config
         for env_vals in generate_combinations(parameter_env, constants, variables):
             if "Custom" in env_vals["environment_envType"]:
                 # Environment based on custom data
