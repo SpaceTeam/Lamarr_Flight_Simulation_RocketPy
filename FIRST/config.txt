@@ -5,7 +5,7 @@ environment_envType=Forecast
 environment_latitude=48.24114                # Launch latitude             # preset
 environment_longitude=13.26570               # Launch longitude            # preset
 environment_max_expected_height=1000         # m                           # preset
-environment_date=(2026, 3, 08, 12, 00, 00)   # yyyy, mm, dd, hh, mm, ss    # preset
+environment_date=(2026,3,08,12,00,00)        # yyyy, mm, dd, hh, mm, ss    # preset
 environment_elevation=170
 
 engine_type=solid

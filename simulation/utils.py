@@ -1,4 +1,6 @@
+import json
 import sys
+import os
 import itertools
 import numpy as np
 import matplotlib.pyplot as plt
@@ -73,9 +75,9 @@ def parse_value(value_str):
                 n = float(item)
                 parsed_items.append(int(n) if n.is_integer() else n)
             except ValueError:
-                if value_str == "False":
+                if item == "False":
                     parsed_items.append(False)
-                elif value_str == "True":
+                elif item == "True":
                     parsed_items.append(True)
                 else:
                     parsed_items.append(item)
@@ -453,7 +455,7 @@ def plot_flights(ax, flight_groups):
 
 
 def plot_safe_flights(project, exclusion_zones, buffer_zones,
-                      flight_groups, heading=None, inclination=None):
+                      flight_groups, heading=None, inclination=None, plot_name = "safe_flights"):
 
     filtered_groups = {}
 
@@ -468,7 +470,6 @@ def plot_safe_flights(project, exclusion_zones, buffer_zones,
 
         filtered_groups[name] = (filtered, color)
 
-    plot_name = "safe_flights"
     if heading is not None:
         plot_name += f"_heading_{heading}"
     if inclination is not None:
@@ -553,3 +554,20 @@ def draw_initial_solutions(constants, variables):
     comparison_normal.trajectories_2d(legend=legend, filename = "2d_yz.png", plane = "yz")
 
 
+def load_zones(path):
+    if not os.path.exists(path + "/zones.json"):
+        return {}, {}, {}
+
+    with open(path + "/zones.json", "r") as f:
+        data = json.load(f)
+
+    def convert(zone_dict):
+        return {
+            name: [tuple(p) for p in points]
+            for name, points in zone_dict.items()
+        }
+
+    exclusion_zones = convert(data.get("exclusion_zones", {}))
+    buffer_zones = convert(data.get("buffer_zones", {}))
+
+    return exclusion_zones, buffer_zones
