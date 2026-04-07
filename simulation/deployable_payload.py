@@ -23,11 +23,12 @@ def create_rocket_without_payload(constants, variables):
     for rocket_w_p_vals in generate_combinations(parameter_rockets_w_p, constants, variables):
         rocket_w_p = {}
         rocket_w_p["nominal"] = copy.deepcopy(rocket_w_p_vals["rocket"])
-        rocket_w_p["nominal"].mass -= rocket_w_p_vals["payload_mass_total"]
+        rocket_w_p["nominal"].mass -= rocket_w_p_vals["payload_mass_total"] /1000
 
-        rocket_w_p["no_main"] = copy.deepcopy(rocket_w_p["nominal"])
+        rocket_w_p["no_main"] = copy.deepcopy(rocket_w_p_vals["rocket"])
+        rocket_w_p["no_main"].parachutes.reverse()
         rocket_w_p["no_main"].parachutes.pop()
-        rocket_w_p["ballistic"] = copy.deepcopy(rocket_w_p["no_main"])
+        rocket_w_p["ballistic"] = copy.deepcopy(rocket_w_p_vals["rocket"])
         rocket_w_p["ballistic"].parachutes.clear()
 
         attach_meta(rocket_w_p["nominal"], {

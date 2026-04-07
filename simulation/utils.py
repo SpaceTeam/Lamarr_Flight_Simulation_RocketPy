@@ -485,7 +485,7 @@ def plot_safe_flights(project, exclusion_zones, buffer_zones,
     if flight_groups:
         plot_flights(ax, filtered_groups)
     
-    fig.savefig(f"{project}/plots/{name}.png", dpi=300, bbox_inches="tight")
+    fig.savefig(f"{project}/plots/{plot_name}.png", dpi=300, bbox_inches="tight")
     #plt.show()
 
 def is_in_exclusion_zone(coords, zones_dict):

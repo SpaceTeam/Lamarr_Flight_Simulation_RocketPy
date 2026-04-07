@@ -24,7 +24,7 @@ thrust=thrust.csv                       # N       # measured
 # rocket_config
 rocket_length=2090                      # mm      # measured   #(230+760+30+470+600)
 rocket_diameter=152                     # mm      # measured
-rocket_dry_mass=16000                   # kg      # measured
+rocket_dry_mass=16000                   # g       # measured
 rocket_CG=1180                          # mm      # measured      #FROM TIP!
 
 rocket_moment_of_intertia_Z=0.0255      # kg*m^2  # calculated
