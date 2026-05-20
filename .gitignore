@@ -1,2 +1,7 @@
-
-.~lock.Simulation_Config.ods\#
+.cache.sqlite
+__pycache__
+*.csv
+*.html
+*.png
+*.kml
+*.html

@@ -1,0 +1,166 @@
+{
+  "project": "CANSAT",
+  "_comment": "Keys starting with _ are ignored by the config loader.",
+
+  "environment": {
+    "_comment": [
+      "date may be generic \"tomorrow_08_local\" for tomorrow 8 AM or an explicit local-time list like [2026, 6, 13, 12, 0, 0].",
+      "[°] latitude: Launch latitude 47° 12' 50.94\"",
+      "[°] longitude: Launch longitude 9° 0' 18.86\"",
+      "[m AGL] max_expected_height",
+      "[m ASL] elevation",
+      "timezone is the local launch-site timezone.",
+      "envType: use 'standard_atmosphere', 'Windy', 'custom_atmosphere', 'reanalysis' OR 'reanalysis_custom';",
+      "         do NOT use 'reanalysis' or 'reanalysis_custom' in combination with the others."
+    ],
+    "date": [2026, 3, 8, 12, 0, 0],
+    "latitude": 48.3990720,
+    "longitude": 13.4526260,
+    "max_expected_height": 700,
+    "elevation": 339.91,
+    "timezone": "Europe/Berlin",
+    "envType": ["Windy", "custom_atmosphere"],
+    "_envType": ["reanalysis"],
+    "windy_weather_models": ["ICONEU"],
+    "custom_weather_models": ["icon_d2", "icon_eu"],
+    "_reanalysis_file": "cansat_weather.nc",
+    "_reanalysis_dictionary": "ECMWF"
+  },
+
+  "engine": {
+    "_comment": "Choose from: solid or liquid",
+    "type": "solid"
+  },
+
+  "motor": {
+    "_comment": [
+      "K700W values are from https://www.thrustcurve.org/motors/AeroTech/K700W/.",
+      "[g] total_mass, propellant_mass",
+      "[mm] diameter, length",
+      "[s] burn_time",
+      "center_of_dry_mass_factor: is multiplied by motor length to estimate the dry CG position from the nozzle.",
+      "thrust: Thrust-curve file in the project folder. Can be .eng/.rsa file for commercial motor or .csv file from static fire test."
+    ],
+    "name": "K700W",
+    "total_mass": 2035,
+    "propellant_mass": 1291,
+    "diameter": 54,
+    "length": 568,
+    "burn_time": 3.3,
+    "center_of_dry_mass_factor": 0.4,
+    "thrust": "AeroTech_K700W.eng"
+  },
+
+  "rocket": {
+    "_comment": [
+      "[g] total_mass_without_motor (weighed)",
+      "[mm] length and diameter (measured)",
+      "[mm] total_CG_without_motor_from_tip (measured; FROM TIP!)",
+      "[kg*m^2] moment_of_intertia_Z and moment_of_intertia_XY (calculated)",
+      "Drag files are expected in the project folder."
+    ],
+    "total_mass_without_motor": 16000,
+    "length": 2090,
+    "total_CG_without_motor_from_tip": 1180,
+    "diameter": 152,
+    "moment_of_intertia_Z": 0.0255,
+    "moment_of_intertia_XY": 16.8,
+    "power_off_drag": "power_off_drag.csv",
+    "power_on_drag": "power_on_drag.csv"
+  },
+
+  "nosecone": {
+    "_comment": [
+      "[mm] length is in mm (measured)",
+      "[mm] cylindrical_section_length"
+    ],
+    "length": 230,
+    "cylindrical_section_length": 0,
+    "kind": "elliptical"
+  },
+
+  "railbuttons": {
+    "_comment": "[mm] upper_from_tip, lower_from_tip (measured FROM TIP!)",
+    "upper_from_tip": 590,
+    "lower_from_tip": 1590
+  },
+
+  "tailcone": {
+    "_comment": [
+      "[mm] bottom_radius, length (measured)",
+      "[mm] cylindrical_section_length (Onshape)"
+    ],
+    "bottom_radius": 75,
+    "cylindrical_section_length": 0,
+    "length": 10
+  },
+
+  "fins": {
+    "_comment": [
+      "[mm] position (Onshape); distance of fins coming out of rocket to rear end rocket",
+      "[m] shape_points (measured): [0,0] root leading edge",
+      "No need to repeat [0, 0] at the end. RocketPy connects the polygon automatically."
+    ],
+    "amount": 3,
+    "position": 465,
+    "name": "Freeform",
+    "shape_points": [[0, 0], [0.145, 0.155], [0.510, 0.155], [0.510, 0.100], [0.410, 0]]
+  },
+
+  "parachutes": {
+    "main": {
+      "_comment": [
+        "if cd_s is provided cd and radius are optional",
+        "[m AGL] trigger",
+        "[Hz] sampling_rate",
+        "[s] lag (measured) - optional",
+        "[Pa] noise; [mean, standard deviation, time-correlation] - optional"
+      ],
+      "cd_s": 6.911503837897546,
+      "trigger": 150,
+      "sampling_rate": 105
+    },
+
+    "drogue": {
+      "cd_s": 0.336875,
+      "trigger": "apogee",
+      "sampling_rate": 105
+    },
+
+    "payload": {
+      "_comment": "cd=0.62, Amin=0.08 m^2, Amax=0.14 m^2",
+      "cd_s": "0.05..0.08:0.01",
+      "trigger": "apogee",
+      "sampling_rate": 105
+    }
+  },
+
+  "flight": {
+    "_comment": [
+      "[m] rail_length",
+      "[°] inclination is in degrees; 0 = horizontal, 90 = vertical.",
+      "[°] heading is in degrees; 0 = north, 90 = east.",
+      "heading/inclination can be:",
+      " - be a single float number", 
+      " - a range string (e.g. 86..90:2 meaning: from 86 to 90 in 2-steps yielding 86, 88, 90",
+      " - a list of specific values, e.g. [86, 87, 90]"
+    ],
+    "rail_length": 6,
+    "inclination": "84..88:2",
+    "_heading": "0..350:10",
+    "heading": "90..180:30"
+  },
+
+  "payload": {
+    "_comment": [
+      "[g] mass_total (300g * 6) and mass",
+      "[mm] diameter and length"
+    ],
+    "mass_total": 1800,
+    "mass": "300..350:10",
+    "diameter": 66,
+    "length": 115,
+    "moment_of_intertia_Z": 0.01,
+    "moment_of_intertia_XY": 0.01
+  }
+}

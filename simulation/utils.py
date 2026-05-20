@@ -1,144 +1,33 @@
-import json
-import sys
-import os
-import itertools
-import numpy as np
-import matplotlib.pyplot as plt
+"""
+Utility functions for the RocketPy simulation backend.
+"""
 
-from math import prod, pi
-from matplotlib.path import Path
-from rocketpy import CompareFlights
-from matplotlib.patches import Polygon
+import itertools
+import json
+import math
+from pathlib import Path
 from IPython.display import Markdown, display
 
-# print in markdown
+
+# keys in the json, that can be varied
+VARIATION_KEYS_WITHOUT_FLIGHT_PLOTS = {"flight_heading", "flight_inclination", "payload_mass", "parachutes_payload_cd_s"}
+# still show flight plots for the following variation keys
+VARIATION_KEYS_WITH_FLIGHT_PLOTS = set()
+
+VARIATION_KEYS = VARIATION_KEYS_WITHOUT_FLIGHT_PLOTS.union(VARIATION_KEYS_WITH_FLIGHT_PLOTS)
+
 def printmd(string):
+    """
+    Print text as Markdown.
+    """
     display(Markdown(string))
 
 
-# returns a range of floats
-def float_range(start, stop, step=1):
-    while start <= stop:
-        yield start
-        start += step
+# =============================================================================
+# Parameter handling
+# =============================================================================
 
-# function to parse different types of parameters in config
-def parse_value(value_str):
-    """Parse a value into constant or list of values."""
-    value_str = value_str.strip()
-
-    # Tuple of tuples
-    # TODO accept tuples of tuples as variables
-    if "((" in value_str and "))" in value_str:
-        value_str = value_str.strip("()")
-        items = value_str.split("),(")
-        parsed_items = []
-        for item in items:
-            item = item.strip("()")
-            sub_items = [v.strip() for v in item.split(",")]
-            sub_parsed_items = []
-            for sub_item in sub_items:
-                try:
-                    n = float(sub_item)
-                    sub_parsed_items.append(int(n) if n.is_integer() else n)
-                except ValueError:
-                    sub_parsed_items.append(sub_item)
-            parsed_items.append(tuple(sub_parsed_items))
-        return tuple(parsed_items)
-    
-    # Tuple of values
-    # TODO accept tuples as variables
-    if "(" in value_str and ")" in value_str:
-        value_str = value_str.strip("()")
-        items = [v.strip() for v in value_str.split(",")]
-        parsed_items = []
-        for item in items:
-            try:
-                n = float(item)
-                parsed_items.append(int(n) if n.is_integer() else n)
-            except ValueError:
-                parsed_items.append(item)
-        return tuple(parsed_items)
-    
-    # Range: a..b:c    # TODO: add comma separated ranges
-    if ".." in value_str:
-        value_str, step = value_str.split(":")
-        start, end = map(float, value_str.split(".."))
-        return list(float_range(start, end, float(step)))
-
-    # Comma-separated variable values
-    if "," in value_str:
-        items = [v.strip() for v in value_str.split(",")]
-        parsed_items = []
-        for item in items:
-            try:
-                n = float(item)
-                parsed_items.append(int(n) if n.is_integer() else n)
-            except ValueError:
-                if item == "False":
-                    parsed_items.append(False)
-                elif item == "True":
-                    parsed_items.append(True)
-                else:
-                    parsed_items.append(item)
-        return parsed_items
-
-    # Otherwise a constant (single value)
-    try:
-        # Convert to float or int where possible
-        if value_str == "False":
-            return False
-        if value_str == "True":
-            return True
-        n = float(value_str)
-        return int(n) if n.is_integer() else n
-    except ValueError:
-        return value_str  # string constant
-
-
-# main function for parsing the config file
-# TODO Error handling for = missing in config.txt
-def parse_config(path):
-    constants = {}
-    variables = {}
-
-    with open(path) as f:
-        for line in f:
-            line = line.split("#")[0].strip()  # remove comments
-            if not line:
-                continue
-            try:
-                name, value_str = map(str.strip, line.split("=", 1))
-            except ValueError:
-                # terminate program with error message
-                print(f"Error parsing line: '{line}'. Missing '=' sign.")
-                sys.exit(100)
-                
-            parsed = parse_value(value_str)
-
-            # Variable = if parsed is a list
-            if isinstance(parsed, list):
-                variables[name] = parsed
-            else:
-                constants[name] = parsed
-
-    return constants, variables
-
-# generates "objects" -> a unique combination, containing each constant and one instance of a variable
-# early concept, but never used in code
-def generate_objects(constants, variables):
-    names = list(variables.keys())
-    value_lists = [variables[n] for n in names]
-
-    for combo in itertools.product(*value_lists):
-        obj = dict(constants)
-        obj.update(zip(names, combo))
-        yield obj
-
-
-
-# TODO: ISSUE: if one param is 0, function returns 1 combination possible, regardless of input size
-def generate_combinations(params, constants, variables):
+def generate_combinations(parameters: list[str], constants, variations):
     """
     Generate all possible value combinations for a given list of parameters.
 
@@ -162,7 +51,7 @@ def generate_combinations(params, constants, variables):
         Yields 10 dictionaries (5 x 2 x 1 combinations).
 
     Args:
-        params (list[str]):
+        parameters (list[str]):
             List of parameter names to generate combinations for.
 
     Yields:
@@ -170,62 +59,37 @@ def generate_combinations(params, constants, variables):
             A dictionary mapping each parameter name to a selected value.
 
     Raises:
-        SystemExit(102):
-            If any parameter is not found in either `constants`
-            or `variables`.
+        KeyError:
+            If any parameter is not found in either `constants` or `variables`.
     """
-    for p in params:
-        if p not in constants and p not in variables:
-            print(f"Error: Parameter '{p}' not found in constants or variables.")
-            sys.exit(102)
+    for p in parameters:
+        if p not in constants and p not in variations:
+            raise KeyError(f"Parameter '{p}' not found in constants or variations.")
 
-    var_params = [p for p in params if p in variables]
-    if not var_params:  # if all params are constants
-        yield {p: constants[p] for p in params}
+    var_parameters = [p for p in parameters if p in variations]
+
+    if not var_parameters:
+        # if all parameters are constants
+        yield {p: constants[p] for p in parameters}
         return
 
-    value_lists = [variables[p] for p in var_params]
+    value_lists = [variations[p] for p in var_parameters]
 
     for combo in itertools.product(*value_lists):
-        values = {p: constants.get(p) for p in params}
-        values.update(dict(zip(var_params, combo)))
+        values = {p: constants.get(p) for p in parameters}
+        values.update(dict(zip(var_parameters, combo)))
         yield values
 
 
-def register(name, objects, constants, variables):
+def lookup(name, constants, variations):
     """
-     Updates either the global `constants` or `variables` dictionary.
-
-    A parameter is stored in:
-    - `constants` if it has exactly one possible value.
-    - `variables` if it has multiple possible values.
-
-    Args:
-        name (str): The parameter name.
-
-        objects: A sequence of possible values for the parameter.
-            - If length == 1 → stored as a constant.
-            - If length > 1 → stored as a variable.
-    """
-    if isinstance(objects, (list, tuple)) and not isinstance(objects, str):
-        if len(objects) == 1:
-            constants[name] = objects[0]
-        else:
-            variables[name] = objects
-    else:
-        constants[name] = objects
-
-    return constants, variables
-
-def lookup(name, constants, variables):
-    """
-    Look up a parameter by name in constants or variables.
+    Look up one parameter by name in constants or variations.
 
     Returns
     -------
     value : stored value
     location : str
-        "constants" or "variables"
+        "constants" or "variations"
 
     Raises
     ------
@@ -234,14 +98,23 @@ def lookup(name, constants, variables):
     if name in constants:
         return constants[name], "constants"
 
-    if name in variables:
-        return variables[name], "variables"
+    if name in variations:
+        return variations[name], "variations"
 
-    raise KeyError(f"{name} not found in constants or variables")
+    raise KeyError(f"{name} not found in constants or variations")
 
-def fill_parameters_exact(parameter_list, names, constants, variables):
+
+def require_value(values, key, context):
     """
-    Searches both the global `constants` and `variables`
+    Raise an error if a required key is missing from a dictionary.
+    """
+    if key not in values:
+        raise KeyError(f"Missing required config key for {context}: {key}")
+
+
+def fill_parameters_exact(parameter_list: list[str], names: str | list[str], constants, variations):
+    """
+    Searches both the global `constants` and `variations` 
     dictionaries and appends only exact parameter name matches.
 
     Args:
@@ -251,22 +124,20 @@ def fill_parameters_exact(parameter_list, names, constants, variables):
         names (str | list[str]):
             A parameter name or list of parameter names to match exactly.
     """
-
     # Normalize to list
     if isinstance(names, str):
         names = [names]
 
     for name in names:
-        if name in constants:
-            parameter_list.append(name)
-        if name in variables:
+        if name in constants or name in variations:
             parameter_list.append(name)
 
-def fill_parameters(parameter_list, prefixes, constants, variables):
+
+def fill_parameters(parameter_list: list[str], prefixes: str | list[str], constants, variations):
     """
-    Searches both the global `constants` and `variables`
+    Searches both the global `constants` and `variations` 
     dictionaries and appends all parameter names that start with
-    the given prefix (or any prefix in a list).
+    that start with one of the supplied prefixes.
 
     Args:
         parameter_list (list[str]):
@@ -277,18 +148,18 @@ def fill_parameters(parameter_list, prefixes, constants, variables):
             Any parameter whose name starts with one of these
             will be appended.
     """
-
     # Normalize to list
     if isinstance(prefixes, str):
         prefixes = [prefixes]
 
     for prefix in prefixes:
         parameter_list.extend(p for p in constants if p.startswith(prefix))
-        parameter_list.extend(p for p in variables if p.startswith(prefix))
+        parameter_list.extend(p for p in variations if p.startswith(prefix))
 
-def check_required(parameter_list, required, kind = None):
+
+def check_required(parameter_list: list[str], required: list[str], kind: str | None = None):
     """
-    Ensure all required parameters are present.
+    Raise an error when required parameters are missing.
 
     If `kind` is given, it is used as a prefix for each required name
     (format: "{kind}_{name}").
@@ -302,93 +173,261 @@ def check_required(parameter_list, required, kind = None):
         ValueError: If any required parameter is missing.
     """
     if kind is not None:
-        required = [kind + "_" + item for item in required]
+        required = [f"{kind}_{item}" for item in required]
+
     missing = set(required) - set(parameter_list)
+
     if missing:
         raise ValueError(f"Missing required {kind} parameters: {missing}")
 
 
-def add_defaults(parameter_list, defaults,  constants, variables, kind = None):
+# def add_defaults(parameter_list, defaults, constants, variations, kind=None):
+#     """
+#     Add default constant parameters if they are not already defined.
+#
+#     If `kind` is given, it is used as a prefix for each default name
+#      (format: "{kind}_{name}").
+#     Args:
+#         parameter_list (list[str]): Existing parameter names.
+#         defaults (dict[str, Any]): Default constant names(key) and values.
+#         kind (str | None): Optional prefix.
+
+#     Updates `constants` and extends `parameter_list` when needed.
+#     """
+#     for key, value in defaults.items():
+#         if kind is not None:
+#             key = f"{kind}_{key}"
+#
+#         if key not in constants and key not in variations:
+#             # if a default value is not already in constants or variations, we have to assume, that it also hasn't gotten a value yet
+#             constants[key] = value
+#             parameter_list.append(key)
+
+
+def count_combinations(parameters, variations):
     """
-    Add default constant parameters if they are not already defined.
+    Count how many combinations a parameter list will generate.
+    """
+    variable_lengths = [len(variations[p]) for p in parameters if p in variations]
 
-    If `kind` is given, it is used as a prefix for each default name
-    (format: "{kind}_{name}").
+    if not variable_lengths:
+        return 1
 
+    return math.prod(variable_lengths)
+
+
+def ensure_list(obj):
+    """
+    Normalize any value into a list so callers can iterate it without checking its type first.
+    Lists pass through; tuples/sets are converted; scalars become `[obj]`; `None` becomes `[]`.
+    """
+    if obj is None:
+        return []
+
+    if isinstance(obj, (list, tuple, set)):
+        return list(obj)
+
+    return [obj]
+
+
+# =============================================================================
+# Configuration loading
+# =============================================================================
+def register(name, objects, constants, variations):
+    """
+    Updates either the global `constants` or `variations` dictionary.
+
+    A parameter is stored in:
+    - `constants` if it has exactly one possible value.
+    - `variations` if it has multiple possible values.
+
+    It removes the parameter of the other dict as safety, if it is called twice.
+    
     Args:
-        parameter_list (list[str]): Existing parameter names.
-        defaults (dict[str, Any]): Default constant names(key) and values.
-        kind (str | None): Optional prefix.
+        name (str): The parameter name.
 
-    Updates `constants` and extends `parameter_list` when needed.
+        objects: A sequence of possible values for the parameter.
+            - If length == 1 → stored as a constant.
+            - If length > 1 → stored as a variable.
     """
-    for k, v in defaults.items():
-        if kind is not None:
-            k = kind + "_" + k
-        if k not in constants and k not in variables:
-            # if a default value is not already in constants or variables, we have to assume, that it also hasn't gotten a value yet
-            constants[k] = v
-            parameter_list.append(k)
- 
-    # fill -> check -> add
-
-def render_meta(meta, indent=0):
-    """
-    Recursively render a metadata dictionary as formatted text lines.
-
-    Args:
-        meta (dict): Metadata dictionary.
-        indent (int): Number of leading spaces for indentation.
-
-    Returns:
-        list[str]: Formatted lines representing the metadata tree.
-    """
-    lines = []
-    pad = " " * indent
-    for k, v in meta.items():
-        lines.append(f"{pad}|  {k}")
-        if hasattr(v, "_meta"):
-            lines.extend(render_meta(v._meta, indent + 3))
+    if isinstance(objects, (list, tuple)) and not isinstance(objects, str):
+        if len(objects) == 1:
+            constants[name] = objects[0]
+            variations.pop(name, None)
         else:
-            lines[-1] += f" = {v}"
-    return lines
+            variations[name] = list(objects)
+            constants.pop(name, None)
+    else:
+        constants[name] = objects
+        variations.pop(name, None)
+
+    return constants, variations
 
 
-def obj_to_pretty_label(obj):
+def convert_constant(value):
     """
-    Build a multi-line label for an object including its metadata.
-
-    Uses `obj.name` if available, otherwise the class name.
+    Recursively prepare a JSON value for storage as a constant: JSON arrays become tuples (immutable, RocketPy-friendly)
+    and `_`-prefixed keys are stripped from any dict found inside.
     """
-    header = obj.name if hasattr(obj, "name") else obj.__class__.__name__
-    if not hasattr(obj, "_meta"):
-        return header
-    return "\n".join([header] + render_meta(obj._meta))
+    if isinstance(value, list):
+        # JSON array
+        return tuple(convert_constant(item) for item in value)
 
-def attach_meta(obj, meta):
+    if isinstance(value, dict):
+        return {
+            key: convert_constant(item)
+            for key, item in value.items()
+            if not key.startswith("_")      # also skip comments in nested dicts
+        }
+
+    return value
+
+
+def expand_string_range(value: str, flat_key):
     """
-    Attach metadata to an object and update its display name.
+    Convert a range string start..stop:step to a list.
 
-    Args:
-        obj: Target object.
-        meta (dict): Metadata to attach.
+    If start <= stop: linear range, endpoint inclusive.
+    Only for "flight_heading": if start > stop: wraps around 360.
+
+    Examples:
+        "86..90:2"   -> [86, 88, 90]
+        "180..90:10" -> [180, 190, ..., 350, 0, 10, ..., 90]
     """
-    obj._meta = meta
-    obj.name = obj_to_pretty_label(obj)
+    if ".." not in value or ":" not in value:
+        return None
+
+    try:
+        range_part, step = value.split(":", 1)
+        start, stop = range_part.split("..", 1)
+        start_value = float(start.strip())
+        stop_value = float(stop.strip())
+        step_value = float(step.strip())
+    except ValueError as error:
+        raise ValueError(f"Invalid range string '{value}'. Use the format start..stop:step.") from error
+
+    if step_value <= 0:
+        raise ValueError("Range step has to be positive.")
+
+    wrapping = start_value > stop_value
+
+    if wrapping and flat_key == "flight_heading":
+        # total arc going clockwise past 360° back to stop
+        total_span = 360 - start_value + stop_value
+    elif wrapping and flat_key != "flight_heading":
+        raise ValueError(f"The range of {flat_key} is not valid: {value}")
+    else:
+        total_span = stop_value - start_value
+
+    # small 1e-9 so floor() doesn't drop the endpoint due to float rounding error
+    num_steps = math.floor(total_span / step_value + 1e-9)
+
+    values = []
+
+    for i in range(num_steps + 1):
+        current_value = round(start_value + i * step_value, 10)
+
+        if wrapping:
+            current_value = current_value % 360
+
+        # collapse integers: 2.0000000000 -> 2
+        if isinstance(current_value, float) and current_value.is_integer():
+            current_value = int(current_value)
+
+        values.append(current_value)
+
+    return values
 
 
-def count_combinations(params, constants, variables):
-    return prod(
-        len(variables[p]) for p in params if p in variables
-    ) or 1
+def walk_config(config_data, prefix=""):
+    """
+    Recursively flatten nested JSON keys into the existing backend key format.
+
+    Example:
+
+    ```json
+    "parachutes": {
+        "main": {
+            "cd": 1.8
+        }
+    }
+    ```
+
+    becomes: `parachutes_main_cd`
+    """
+    constants = {}
+    variations = {}
+
+    for key, value in config_data.items():
+        if key.startswith("_"):
+            # ignore "commented out" entries
+            continue
+
+        flat_key = f"{prefix}_{key}" if prefix else key       
+
+        if flat_key in VARIATION_KEYS and isinstance(value, list):
+            # only treat lists as variation for set keys
+            variations[flat_key] = value
+            continue
+
+        if flat_key in VARIATION_KEYS and isinstance(value, str):
+            # we expect "start..stop:step"
+            range_values = expand_string_range(value, flat_key)
+
+            if range_values is not None:
+                variations[flat_key] = range_values
+                continue
+
+        if isinstance(value, dict):
+            # e.g. for parachutes
+            child_constants, child_variations = walk_config(value, flat_key)
+            constants.update(child_constants)
+            variations.update(child_variations)
+            continue
+
+        constants[flat_key] = convert_constant(value)
+
+    return constants, variations
 
 
+def load_config(config_path: Path):
+    """
+    Load a JSON config file.
+    
+    Input: path to `config.json` file.
+
+    The function fails if the config file does not exist.
+    """
+
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    if config_path.suffix.lower() != ".json":
+        raise ValueError(f"Only JSON config files are supported: {config_path}")
+
+    # load and parse config
+    with open(config_path, encoding="utf-8") as config_file:
+        data = json.load(config_file)
+
+    constants, variations = walk_config(data)
+
+    if variations:
+        # do not create kml files if we vary flights
+        export_kml = False
+    else:
+        export_kml = True
+    
+    return constants, variations, export_kml
 
 
-
+# =============================================================================
+# Zone loading
+# =============================================================================
 
 def scale_zones(zones, scale_factor):
     """
+    Scale polygon coordinates around each polygon centroid.
+    
     scale_factor > 1  -> enlarge
     scale_factor = 1  -> unchanged
     scale_factor < 1  -> shrink
@@ -416,158 +455,159 @@ def scale_zones(zones, scale_factor):
 
     return enlarged
 
-# ===============================
-# Function to plot polygons
-# ===============================
-def plot_zones(ax, zones, color='red', alpha=0.3):
-    for name, coords in zones.items():
-        polygon = Polygon(coords, closed=True, facecolor=color, edgecolor=color, alpha=alpha)
-        ax.add_patch(polygon)
-    # Adjust limits
-    all_x = [x for coords in zones.values() for x, y in coords]
-    all_y = [y for coords in zones.values() for x, y in coords]
-    ax.set_xlim(min(all_x) - 50, max(all_x) + 50)
-    ax.set_ylim(min(all_y) - 50, max(all_y) + 50)
-    ax.set_aspect('equal', adjustable='box')
-    ax.grid(True)
 
-# ===============================
-# Function to plot flight impacts
-# ===============================
-def plot_flights(ax, flight_groups):
+def _polar_to_cartesian(distance_m, heading_deg):
     """
-    flight_groups = {
-        "rocket_nominal": (flights, "green"),
-        "rocket_no_main": (flights, "orange"),
-        "rocket_ballistic": (flights, "red"),
-        "payload_nominal": (flights, "blue"),
-        "payload_no_chute": (flights, "purple"),
-    }
+    Convert a zone vertex from polar [distance, heading] to Cartesian (x, y).
+
+    Args:
+        distance_m (float): Distance from launch site to zone corner, in meters.
+        heading_deg (float): Heading angle measured clockwise from north, in degrees; meaning 0° = North, 90° = East.
     """
-    for label, (flights, color) in flight_groups.items():
-        xs = [f.x_impact for f in flights]
-        ys = [f.y_impact for f in flights]
-        ax.scatter(xs, ys, color=color, label=label)
-
-    ax.scatter(0, 0, color="black", marker="x", label="launch rail")
-    ax.legend()
+    heading_rad = math.radians(heading_deg)
+    return (distance_m * math.sin(heading_rad), distance_m * math.cos(heading_rad))
 
 
-
-def plot_safe_flights(project, exclusion_zones, buffer_zones,
-                      flight_groups, heading=None, inclination=None, plot_name = "safe_flights"):
-
-    filtered_groups = {}
-
-    for name, (flights, color) in flight_groups.items():
-        filtered = flights
-
-        if heading is not None:
-            filtered = [f for f in filtered if f.heading == heading]
-
-        if inclination is not None:
-            filtered = [f for f in filtered if f.inclination == inclination]
-
-        filtered_groups[name] = (filtered, color)
-
-    if heading is not None:
-        plot_name += f"_heading_{heading}"
-    if inclination is not None:
-        plot_name += f"_inclination_{inclination}"
-
-    fig, ax = plt.subplots()
-
-    if exclusion_zones:
-        plot_zones(ax, exclusion_zones, color="red")
-    if buffer_zones:
-        plot_zones(ax, buffer_zones, color="orange")
-
-    if flight_groups:
-        plot_flights(ax, filtered_groups)
-    
-    fig.savefig(f"{project}/plots/{plot_name}.png", dpi=300, bbox_inches="tight")
-    #plt.show()
-
-def is_in_exclusion_zone(coords, zones_dict):
+def load_zones(zones_path: Path):
     """
-    Check which points are inside any of the exclusion zones.
+    Load polygon zones from a JSON file with `exclusion_zones` and `buffer_zones` top-level keys into two dicts
+    containing the name as key and the polygon points as values:
+        {name: [(distance_m, heading_deg), ...]}
 
-    Parameters
-    ----------
-    coords : array-like of (x, y) tuples
-        [(x1, y1), (x2, y2), ...]
-    zones_dict : dict
-        {"zone_name": [(x1,y1), (x2,y2), ...], ...}
+    - exclusion_zones: where we cannot land
+    - buffer_zones: saftey margin around exclusion zones and zones where we rather should not land (e.g. forest)
 
-    Returns
-    -------
-    inside_mask : np.ndarray (bool)
-        True if point is inside ANY zone
+    We later mark a flight as unsafe if any trajectory (nominal, no_main, ballistic) enters a buffer zone.
     """
-    points = np.asarray(coords)  # shape (N, 2)
-    inside_mask = np.zeros(len(points), dtype=bool)
+    if not zones_path.exists():
+        return {}, {}
 
-    for zone_coords in zones_dict.values():
-        path = Path(zone_coords)
-        inside_mask |= path.contains_points(points)
-
-    return inside_mask
-
-
-def ensure_list(obj):
-    if obj is None:
-        return []
-    if isinstance(obj, (list, tuple, set)):
-        return list(obj)
-    return [obj]
-
-def get_unsafe_headings(flights, zones):
-    coords  = [(f.x_impact, f.y_impact) for f in flights]
-
-    # ===============================
-    # Check which impacts are in exclusion zones
-    # ===============================
-    impacts  = is_in_exclusion_zone(coords, zones)
-
-    # ===============================
-    # Find headings of rockets in exclusion zones
-    # ===============================
-    headings_in_zone = list({flights[i].heading 
-                            for i, in_zone in enumerate(impacts) if in_zone})
-
-    return headings_in_zone
-
-
-
-
-def draw_initial_solutions(constants, variables):
-    legend = False
-    all_flights = lookup("all_flights", constants, variables)[0]
-
-    #for flight in all_flights:
-    #    print(flight.name)
-        # print(flight._meta)
-    comparison_normal = CompareFlights(all_flights)
-    comparison_normal.trajectories_3d(legend=legend, filename = "3d.png")
-    comparison_normal.trajectories_2d(legend=legend, filename = "2d_xy.png", plane = "xy")
-    comparison_normal.trajectories_2d(legend=legend, filename = "2d_xz.png", plane = "xz")
-    comparison_normal.trajectories_2d(legend=legend, filename = "2d_yz.png", plane = "yz")
-
-
-def load_zones(path):
-    if not os.path.exists(path + "/zones.json"):
-        return {}, {}, {}
-
-    with open(path + "/zones.json", "r") as f:
+    with open(zones_path) as f:
         data = json.load(f)
 
     def convert(zone_dict):
         return {
-            name: [tuple(p) for p in points]
+            name: [_polar_to_cartesian(dist, heading) for dist, heading in points]
             for name, points in zone_dict.items()
         }
 
     exclusion_zones = convert(data.get("exclusion_zones", {}))
     buffer_zones = convert(data.get("buffer_zones", {}))
+    exclusion_zone_saftey_margin = data.get("exclusion_zone_saftey_margin", 1)
+    return exclusion_zones, buffer_zones, exclusion_zone_saftey_margin
 
-    return exclusion_zones, buffer_zones
+
+# =============================================================================
+# Object metadata
+# =============================================================================
+
+def render_meta(meta, indent=0):
+    """
+    Recursively render a metadata dictionary as formatted text lines.
+
+    Args:
+        meta (dict): Metadata dictionary.
+        indent (int): Number of leading spaces for indentation.
+
+    Returns:
+        list[str]: Formatted lines representing the metadata tree.
+    """
+    lines = []
+    pad = " " * indent
+    for k, v in meta.items():
+        lines.append(f"{pad}|  {k}")
+        if hasattr(v, "_meta"):
+            lines.extend(render_meta(v._meta, indent + 3))
+        else:
+            lines[-1] += f" = {v}"
+    return lines
+
+
+def obj_to_pretty_label(obj, header):
+    """
+    Build a multi-line label for an object including its metadata.
+    """
+    if not hasattr(obj, "_meta"):
+        return header
+
+    return "\n".join([header] + render_meta(obj._meta))
+
+
+def render_meta_flat(meta):
+    """
+    Render a metadata dictionary as a flat list of `key=value` strings for filenames.
+    """
+    parts = []
+
+    for key, value in meta.items():
+        if hasattr(value, "_meta"):
+            # Nested object: include the key and recurse into its meta dict.
+            parts.append(str(key))
+            parts.extend(render_meta_flat(value._meta))
+        else:
+            parts.append(f"{key}={value}")
+
+    return parts
+
+
+def obj_to_filename_label(obj, header):
+    """
+    Build a flat, filesystem-safe identifier for a RocketPy object.
+    """
+    parts = [str(header)]
+    if hasattr(obj, "_meta"):
+        parts.extend(render_meta_flat(obj._meta))
+
+    return "_".join(parts)
+
+
+def attach_meta(obj, meta):
+    """
+    Attach metadata to an object and update both its display name and its filename label.
+
+    Args:
+        obj: Target object.
+        meta (dict): Metadata to attach.
+    """
+    obj._meta = meta
+
+    try:
+        original_name = obj.name if hasattr(obj, "name") else obj.__class__.__name__
+        obj.filename_label = obj_to_filename_label(obj, header=original_name)
+        obj.name = obj_to_pretty_label(obj, header=original_name)
+    except Exception:
+        pass
+
+
+# =============================================================================
+# File/path helpers
+# =============================================================================
+def get_project_file(constants, file: str):
+    """
+    Resolve a required file name relative to the configured project folder.
+    
+    Args:
+        file:
+            If it is a path we take this. If it is a file name we search in the project folder.
+    """
+    file_path = Path(file)
+
+    if file_path.exists():
+        return str(file_path)
+
+    project_file_path = Path(constants["project"]) / file
+
+    if project_file_path.exists():
+        return str(project_file_path)
+
+    raise FileNotFoundError(f"Required project file not found: {file}")
+
+
+def ensure_project_folders(project_path: Path):
+    """
+    Create the standard output folders used by the notebook and backend.
+    """
+    project_path.mkdir(parents=True, exist_ok=True)
+    (project_path / "plots").mkdir(exist_ok=True)
+    (project_path / "trajectory_kml").mkdir(exist_ok=True)
+    (project_path / "weather_csvs").mkdir(exist_ok=True)

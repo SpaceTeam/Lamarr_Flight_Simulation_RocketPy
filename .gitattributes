@@ -1,0 +1,6 @@
+# Strip cell outputs and meta data from Jupyter notebooks before they are staged for commit.
+# Reason: reduces commited file size and thus prevent having to use LFS.
+# Requires installation per repo:
+#   - pip install nbstripout
+#   - in the repo containing the .git folder: nbstripout --install
+*.ipynb filter=nbstripout

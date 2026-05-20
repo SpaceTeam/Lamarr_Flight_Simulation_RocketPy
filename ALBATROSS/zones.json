@@ -1,31 +1,14 @@
 {
+    "_comment": "Coordinates: [distance_m, heading_deg] from the launch rail. heading: 0 = North, 90 = East, clockwise.",
     "exclusion_zones": {
-        "Exclusion Zone Flughafen": [
-            [-10, 450],
-            [-210, 550],
-            [-510, 350],
-            [-500, 10],
-            [-400, -10]
-        ],
-        "Exclusion Zone Niederham": [
-            [-1000, -470],
-            [-120, -210],
-            [200, -530],
-            [380, -890]
-        ],
-        "Rehwinkl": [
-            [360, -220],
-            [850, -150],
-            [800, -440],
-            [380, -440]
+        "Spectators and Houses": [
+            [64.32, 80],
+            [216.31, 107.32],
+            [224.18, 140.66],
+            [38.61, 154.1]
         ]
     },
 
-    "buffer_zones": {
-        "Buffer Zone Wald": [
-            [-10, 450],
-            [300, -110],
-            [730, 280]
-        ]
-    }
+    "buffer_zones": {},
+    "exclusion_zone_saftey_margin": 1.3
 }
