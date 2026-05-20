@@ -153,7 +153,7 @@
       " - a list of specific values, e.g. [86, 87, 90]"
     ],
     "rail_length": 7,
-    "_inclination": 84,
+    "_inclination": 85,
     "inclination": "84..88:2",
     "_heading": 300,
     "heading": "230..20:10"
