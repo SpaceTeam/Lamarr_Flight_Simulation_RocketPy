@@ -42,6 +42,9 @@ class CustomPrints:
         """
         Print selected flight conditions at apogee.
         """
+        if not hasattr(self.flight_forecast, "apogee_time"):
+            return
+        
         apogee_time = self.flight_forecast.apogee_time
         altitude_asl = self.get_altitude_asl(apogee_time)
         altitude_agl = self.get_altitude_agl(apogee_time)
@@ -63,7 +66,7 @@ class CustomPrints:
         """
         print("\nParachute Events\n")
         
-        if not self.flight_forecast.parachute_events:
+        if hasattr(self.flight_forecast, "parachute_events") or not self.flight_forecast.parachute_events:
             print("    No Parachute Events Were Triggered.")
             return
 
@@ -177,6 +180,9 @@ class CustomPlots:
         start_time = None
         end_time = None
 
+        if values is None:
+            return start_time, end_time
+        
         for index, value in enumerate(values):
             if value >= threshold and start_time is None:
                 start_time = time_samples[index]
@@ -244,13 +250,29 @@ class CustomPlots:
         """
         Add standard flight event markers to a Plotly figure.
         """
-        out_of_rail_time = float(self.flight_forecast.out_of_rail_time)
+        if hasattr(self.flight_forecast, "out_of_rail_time"):
+            out_of_rail_time = float(self.flight_forecast.out_of_rail_time)
+        else:
+            out_of_rail_time = None
+            
         burn_out_time = float(self.motor.burn_out_time)
-        apogee_time = float(self.flight_forecast.apogee_time)
-        ground_hit_time = float(self.flight_forecast.t_final)
         
-        mach_number = np.array([self.flight_forecast.mach_number(time) for time in time_samples], dtype=float)
+        if hasattr(self.flight_forecast, "apogee_time"):
+            apogee_time = float(self.flight_forecast.apogee_time)
+        else:
+            apogee_time = None
         
+        if hasattr(self.flight_forecast, "t_final"):
+            ground_hit_time = float(self.flight_forecast.t_final)
+        else: 
+            ground_hit_time = None
+        
+        if hasattr(self.flight_forecast, "mach_number"):
+            mach_number = np.array([self.flight_forecast.mach_number(time) for time in time_samples], dtype=float)
+        else:
+            mach_number = None
+        
+
         # --- Transonic and supersonic intervals ---
         transonic_start_time, transonic_end_time = self.find_threshold_interval(
             mach_number,
@@ -274,10 +296,11 @@ class CustomPlots:
             (supersonic_end_time, "Supersonic Exit", "blue"),
         ]
 
-        for ejection_time, parachute in self.flight_forecast.parachute_events:
-            inflation_time = ejection_time + parachute.lag
-            event_markers.append((float(ejection_time),f"{parachute.name} parachute ejected; cd_s {parachute.cd_s:.2f} m²", "black"))
-            event_markers.append((float(inflation_time),f"{parachute.name} parachute inflated", "black"))
+        if hasattr(self.flight_forecast, "parachute_events"):
+            for ejection_time, parachute in self.flight_forecast.parachute_events:
+                inflation_time = ejection_time + parachute.lag
+                event_markers.append((float(ejection_time),f"{parachute.name} parachute ejected; cd_s {parachute.cd_s:.2f} m²", "black"))
+                event_markers.append((float(inflation_time),f"{parachute.name} parachute inflated", "black"))
 
         # --- sort markers by their time and drop those outside of the time range ---
         plot_start_time = float(time_samples[0])
@@ -379,7 +402,7 @@ class CustomPlots:
             "xaxis": {
                 "title": "Time [s]",
                 "range": [time_start, time_end + 1],
-                "dtick": 1,
+                "dtick": 4,
                 "showgrid": True,
                 "hoverformat": ".3f",
                 "unifiedhovertitle": {
@@ -537,21 +560,45 @@ class CustomPlots:
         )
         
         
-    def plot_vertical_motion(self):
+    def plot_vertical_motion(self, time_interval=None):
         """
         Plot altitude, vertical velocity, and vertical acceleration over time.
         """
-        time_start = 0.0
-        time_end = float(self.flight_forecast.t_final)
+        if time_interval:
+            time_start = time_interval[0]
+            time_end = time_interval[1]
+        else:
+            time_start = 0.0
+            time_end = float(self.flight_forecast.t_final)
         time_samples = self.get_time_samples(time_start=0.0, time_end=time_end)
         
         # --- Flight data ---
         # altitude(t)
         altitude = np.array([self.flight_forecast.altitude(time) for time in time_samples], dtype=float)
+        
         # vertical_velocity(t)
-        vertical_velocity = np.array([self.flight_forecast.vz(time) for time in time_samples], dtype=float)
+        if hasattr(self.flight_forecast, "vz"):
+            motion = np.array([self.flight_forecast.vz(time) for time in time_samples], dtype=float)
+            name_motion = "Vertical velocity [m/s]"
+            name_motion_hover = "Vertical velocity: %{y:.1f} m/s<extra></extra>"
+            title_yaxis = "Altitude [m] / Vertical velocity [m/s]"
+        else:
+            motion = np.array([self.flight_forecast.speed(time) for time in time_samples], dtype=float)
+            name_motion = "Speed [m/s]"
+            name_motion_hover = "Speed: %{y:.1f} m/s<extra></extra>"
+            title_yaxis = "Altitude [m] / Speed [m/s]"
+            
         # vertical_acceleration(t)
-        vertical_acceleration = np.array([self.flight_forecast.az(time) for time in time_samples], dtype=float)
+        if hasattr(self.flight_forecast, "az"):
+            acceleration = np.array([self.flight_forecast.az(time) for time in time_samples], dtype=float)
+            name_acceleration = "Vertical acceleration [m/s²]"
+            name_acceleration_hover = "Vertical acceleration: %{y:.1f} m/s²<extra></extra>"
+            title_yaxis2 = "Vertical acceleration [m/s²]"
+        else:
+            acceleration = np.array([self.flight_forecast.acceleration(time) for time in time_samples], dtype=float)
+            name_acceleration = "Total acceleration [m/s²]"
+            name_acceleration_hover = "Total acceleration: %{y:.1f} m/s²<extra></extra>"
+            title_yaxis2 = "Total acceleration [m/s²]"
 
         # --- Plot ---
         traces = [
@@ -563,16 +610,16 @@ class CustomPlots:
                 "line": {"color": "royalblue"},
             },
             {
-                "y": vertical_velocity,
-                "name": "Vertical velocity [m/s]",
-                "hovertemplate": "Vertical velocity: %{y:.1f} m/s<extra></extra>",
+                "y": motion,
+                "name": name_motion,
+                "hovertemplate": name_motion_hover,
                 "line": {"color": "firebrick"},
             },
             # right y axis
             {
-                "y": vertical_acceleration,
-                "name": "Vertical acceleration [m/s²]",
-                "hovertemplate": "Vertical acceleration: %{y:.1f} m/s²<extra></extra>",
+                "y": acceleration,
+                "name": name_acceleration,
+                "hovertemplate": name_acceleration_hover,
                 "line": {"color": "gold"},
                 "yaxis": "y2",
             },
@@ -584,8 +631,8 @@ class CustomPlots:
             time_start=time_start,
             time_end=time_end,
             traces=traces,
-            yaxis_title="Altitude [m] / Vertical velocity [m/s]",
-            yaxis2_title="Vertical acceleration [m/s²]",
+            yaxis_title=title_yaxis,
+            yaxis2_title=title_yaxis2,
             width=1400,
             height=850,
         )
