@@ -168,7 +168,7 @@ def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_na
     custom_plots = CustomPlots(
         flight_forecast=flight,
         motor=motor,
-        environment_name=plot_label,
+        plot_title=plot_label,
         rocket=rocket,
         rocket_config={"total_length": utils.lookup("rocket_length", constants, variations)[0]},
     )

@@ -131,8 +131,8 @@ class CustomPlots:
         Flight forecast to plot.
     CustomPlots.motor : SolidMotor | LiquidMotor | HybridMotor
         Used motor for this flight forecast.
-    CustomPlots.environment_name: str
-        Used environment for this flight forecast.
+    CustomPlots.plot_title: str
+        Used configuration for this flight forecast.
     CustomPlots.rocket : Rocket
         Used rocket for this flight forecast.
     CustomPlots.rocket_config : dict
@@ -142,13 +142,13 @@ class CustomPlots:
         self,
         flight_forecast: Flight,
         motor: SolidMotor | LiquidMotor | HybridMotor,
-        environment_name: str,
+        plot_title: str,
         rocket: Rocket,
         rocket_config: dict,
     ):
         self.flight_forecast = flight_forecast
         self.motor = motor
-        self.environment_name = environment_name
+        self.plot_title = plot_title
         self.rocket = rocket
         self.rocket_config = rocket_config
 
@@ -495,7 +495,7 @@ class CustomPlots:
         ]
 
         self.create_plotly_plot(
-            title=f"[{self.environment_name}] CG/CP position, Mach, Stability ({title_suffix})",
+            title=f"[{self.plot_title}] CG/CP position, Mach, Stability ({title_suffix})",
             time_samples=time_samples,
             time_start=time_start,
             time_end=time_end,
@@ -526,7 +526,7 @@ class CustomPlots:
         ]
         
         self.create_plotly_plot(
-            title=f"[{self.environment_name}] Angle of Attack over time",
+            title=f"[{self.plot_title}] Angle of Attack over time",
             time_samples=time_samples,
             time_start=time_start,
             time_end=time_end,
@@ -579,7 +579,7 @@ class CustomPlots:
         ]
 
         self.create_plotly_plot(
-            title=f"[{self.environment_name}] Vertical motion over time",
+            title=f"[{self.plot_title}] Vertical motion over time",
             time_samples=time_samples,
             time_start=time_start,
             time_end=time_end,
