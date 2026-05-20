@@ -1,6 +1,5 @@
 .cache.sqlite
 __pycache__
-*.csv
 *.html
 *.png
 *.kml
