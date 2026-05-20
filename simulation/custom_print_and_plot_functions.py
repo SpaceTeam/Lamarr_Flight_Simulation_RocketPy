@@ -402,7 +402,7 @@ class CustomPlots:
             "xaxis": {
                 "title": "Time [s]",
                 "range": [time_start, time_end + 1],
-                "dtick": 4,
+                # "dtick": 4,
                 "showgrid": True,
                 "hoverformat": ".3f",
                 "unifiedhovertitle": {
