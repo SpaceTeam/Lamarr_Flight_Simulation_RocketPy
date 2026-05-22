@@ -579,6 +579,8 @@ def add_mode_flight_traces(figure, mode_name, flight_groups, visible, safety_by_
                 flight.inclination,
                 flight.env.name if hasattr(flight.env, "name") else flight.name,
                 safety_by_config.get(scenario_config_key(flight), "unknown"),
+                flight.latitude(flight.t_final),
+                flight.longitude(flight.t_final),
             ]
             for flight in flight_list
         ]
@@ -596,7 +598,8 @@ def add_mode_flight_traces(figure, mode_name, flight_groups, visible, safety_by_
                 "heading: %{customdata[0]}°<br>"
                 "inclination: %{customdata[1]}°<br>"
                 "env: %{customdata[2]}<br>"
-                "impact: (%{x:.1f}, %{y:.1f}) m"
+                "impact: (%{x:.1f}, %{y:.1f}) m<br>"
+                "lat: %{customdata[4]:.5f}°; lon: %{customdata[5]:.5f}°"
                 "<extra></extra>"
             ),
             visible=visible,
