@@ -16,8 +16,8 @@
       "         - reanalysis uses RocketPy's native Reanalysis mode with file + dictionary.",
       "         - reanalysis_custom uses existing CSV files from previous exports with export_weather_data.py."
     ],
-    "date": "tomorrow_08_local",
-    "_date": [2026, 5, 23, 12, 0, 0],
+    "_date": "tomorrow_08_local",
+    "date": [2026, 5, 23, 12, 0, 0],
     "latitude": 48.8038856,
     "longitude": 12.5485937,
     "max_expected_height": 700,
@@ -156,7 +156,7 @@
     "_inclination": 85,
     "inclination": "84..88:2",
     "_heading": 300,
-    "heading": "230..20:10"
+    "heading": "250..10:10"
   },
 
   "payload": {
