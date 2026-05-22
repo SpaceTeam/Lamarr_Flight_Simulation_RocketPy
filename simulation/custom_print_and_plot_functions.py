@@ -66,7 +66,7 @@ class CustomPrints:
         """
         print("\nParachute Events\n")
         
-        if hasattr(self.flight_forecast, "parachute_events") or not self.flight_forecast.parachute_events:
+        if not hasattr(self.flight_forecast, "parachute_events") or not self.flight_forecast.parachute_events:
             print("    No Parachute Events Were Triggered.")
             return
 
