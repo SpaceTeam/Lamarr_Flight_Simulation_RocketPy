@@ -96,6 +96,8 @@ def print_one_flight_with_custom_prints(flight: Flight):
 
     flight.prints.launch_rail_conditions()
     flight.prints.out_of_rail_conditions()
+    print(f"OpenRocket Rail Departure Velocity: {flight.speed(flight.out_of_rail_time + 0.01)} m/s")      # OpenRocket flags that event 0.01 s later
+    print(f"Effective rail length: {flight.effective_1rl} m")
     custom_prints.apogee_conditions()
     # flight.prints.apogee_conditions()
     custom_prints.parachute_events()
