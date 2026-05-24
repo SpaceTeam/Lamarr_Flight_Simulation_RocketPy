@@ -224,9 +224,13 @@ def create_environment(constants, variations, OUTPUT_LEVEL=0):
             environments[reanalysis_env.name] = reanalysis_env
 
         if "reanalysis_custom" in environment_types:
-            require_value(env_values, "environment_reanalysis_csv", "reanalysis environment")
+            csv_prefix = "environment_reanalysis_csv_"
+            reanalysis_csv = {key[len(csv_prefix):]: env_values[key] for key in env_values if key.startswith(csv_prefix)}
 
-            for csv_file in ensure_list(env_values["environment_reanalysis_csv"]):
+            if not reanalysis_csv:
+                raise KeyError("Missing required config key for reanalysis environment: reanalysis_csv")
+
+            for model_name, csv_file in reanalysis_csv.items():
                 project_path = Path(constants["project"])
                 csv_path = Path(csv_file)
 
@@ -256,7 +260,7 @@ def create_environment(constants, variations, OUTPUT_LEVEL=0):
                     wind_u=wind_u_function,
                     wind_v=wind_v_function,
                 )
-                reanalysis_env.name = f"Reanalysis_Custom_{csv_path.stem}"
+                reanalysis_env.name = f"Reanalysis_Custom_{model_name}"
                 attach_meta(reanalysis_env, {key: env_values[key] for key in variations if key in env_values})
                 environments[reanalysis_env.name] = reanalysis_env
 
@@ -924,7 +928,13 @@ def create_flight(constants, variations):
         scenario_rockets = build_scenario_rockets(flight_values["rocket"], has_drogue, payload_mass_total)
         meta = {key: flight_values[key] for key in variations if key in flight_values}
 
+        print(f"{i / total:.0%}")
+        # if i % step == 0 or i == total:
+        #     print(f"{i / total:.0%}")
+        
         for env_name, environment in environments.items():
+            # if i / total >= 0.77:
+            #     print(f"env={env_name}, flight_values={flight_values}")
             ascent_flight = None
             scenario_set = {}
 
@@ -943,6 +953,7 @@ def create_flight(constants, variations):
                 ascent_flights_by_env[env_name].append(ascent_flight)
 
             for scenario_name, rocket in scenario_rockets.items():
+                # print(f"scenario_rockets={scenario_rockets}")
                 flight_options = {
                     "rocket": rocket,
                     "environment": environment,
@@ -962,9 +973,6 @@ def create_flight(constants, variations):
                 scenario_set[scenario_name] = flight
 
             flights_by_env[env_name].append(scenario_set)
-
-        if i % step == 0 or i == total:
-            print(f"{i / total:.0%}")
 
     constants, variations = register("flights_by_env", flights_by_env, constants, variations)
 
