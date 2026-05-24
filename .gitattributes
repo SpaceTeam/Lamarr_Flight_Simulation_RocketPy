@@ -3,4 +3,4 @@
 # Requires installation per repo:
 #   - pip install nbstripout
 #   - in the repo containing the .git folder: nbstripout --install
-*.ipynb filter=nbstripout
+simulation_orchestration.ipynb filter=nbstripout
