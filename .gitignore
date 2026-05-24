@@ -1,6 +1,5 @@
 .cache.sqlite
 __pycache__
-*.html
 *.png
 *.kml
-*.html
+landing_positions.html
