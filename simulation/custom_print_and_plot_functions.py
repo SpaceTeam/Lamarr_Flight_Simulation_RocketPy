@@ -1,6 +1,7 @@
 import numpy as np
 from colorama import Fore, Style                                  # https://github.com/tartley/colorama
 import math
+from scipy.spatial.transform import Rotation
 from rocketpy import SolidMotor, LiquidMotor, HybridMotor, Rocket, Flight, Parachute
 import plotly.graph_objects as go
 
@@ -154,6 +155,7 @@ class CustomPlots:
         self.plot_title = plot_title
         self.rocket = rocket
         self.rocket_config = rocket_config
+
 
     def get_time_samples(self, time_start: float, time_end: float) -> np.ndarray:
         """
@@ -531,14 +533,26 @@ class CustomPlots:
             height=550,
         )
 
-    def plot_angle_of_attack(self):
+    def plot_angle_of_attack_and_attitude_angle(self):
+        """
+        Plot angle of attack and attitude angle until apogee.
+            - angle of attack(t): angle between the rocket's velocity vector and its longitudinal axis.
+            - attitude angle(t): angle between the rocket's longitudinal axis and the local horizontal plane th earth's surface.
+                In OpenRocket the attitude angle is called "vertical orientation (zenith)".
+        """
         time_start = 0.0
-        time_end = float(self.flight_forecast.apogee_time)
+        
+        inflation_times = []
+        for ejection_time, parachute in self.flight_forecast.parachute_events:
+            inflation_times.append(ejection_time + parachute.lag)
+        first_inflation_time = min(inflation_times) if inflation_times else None
+        
+        time_end = first_inflation_time if first_inflation_time is not None else float(self.flight_forecast.apogee_time)
         time_samples = self.get_time_samples(time_start=time_start, time_end=time_end)
         
-        # angle_of_attack(t)
         angle_of_attack = np.array([self.flight_forecast.angle_of_attack(time) for time in time_samples], dtype=float)
-
+        attitude_angle = np.array([self.flight_forecast.attitude_angle(time) for time in time_samples], dtype=float)
+        
         traces = [
             {
                 "y": angle_of_attack,
@@ -546,19 +560,143 @@ class CustomPlots:
                 "hovertemplate": "Angle of attack: %{y:.2f} °<extra></extra>",
                 "line": {"color": "royalblue"},
             },
+            {
+                "y": attitude_angle,
+                "name": "Attitude angle [°]",
+                "hovertemplate": "Attitude angle: %{y:.2f} °<extra></extra>",
+                "line": {"color": "firebrick"},
+            },
         ]
-        
+
         self.create_plotly_plot(
-            title=f"[{self.plot_title}] Angle of Attack over time",
+            title=f"[{self.plot_title}] Angle of attack and attitude angle over time",
             time_samples=time_samples,
             time_start=time_start,
             time_end=time_end,
             traces=traces,
-            yaxis_title="Angle of attack [°]",
-            width=800,
-            height=450,
+            yaxis_title="Angle [°]",
+            width=900,
+            height=500,
+        )
+
+
+    def plot_angular_velocity(self, transform_openrocket=False):
+        """
+        Plot angular velocity until first parachute inflation or apogee.
+
+        transform_openrocket=False: RocketPy body reference frame is used.
+            - angular_rate_1 (w1): pitch rate (angular velocity around the rocket's lateral axis / x axis)
+            - angular_rate_2 (w2): yaw rate (angular velocity around the rocket's vertical axis / y axis)
+            - angular_rate_3 (w3): roll rate (angular velocity around the rocket's longitudinal axis / z axis)
+
+        https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/rocket-rotations/
+
+        transform_openrocket=True: OpenRocket flow-aligned reference frame (same as body frame when angle of attack α and 
+        sideslip β are zero).
+            The body frame is rotated around the longitudinal z-axis by
+                theta = atan2(airspeed y component in body frame, airspeed x component in body frame)
+            where airspeed = rocket velocity - wind direction, expressed in the body frame (matches OpenRocket).
+
+            Then:
+            - angular_rate_1: pitch rate (rotation around flow-aligned reference frame y-axis; changes with angle of attack)
+            - angular_rate_2: yaw rate (rotation around flow-aligned reference frame x-axis / airspeed lateral direction; changes with sideslip angle)
+            - angular_rate_3: roll rate (same as body frame)
+
+        See: https://www.researchgate.net/figure/Rocket-orientation-angles-in-Earth-frame-and-angle-of-attack-a-and-sideslip-angle-b_fig4_360423890
+        with X_b = OpenRocket z, Y_b = OpenRocket y, Z_b = OpenRocket x.
+        """
+        # TODO: check this! (the result matches OpenRocket, which is good, but I still want to double check the math and the axis mapping) 
+        time_start = 0.0
+
+        inflation_times = []
+        for ejection_time, parachute in self.flight_forecast.parachute_events:
+            inflation_times.append(ejection_time + parachute.lag)
+        first_inflation_time = min(inflation_times) if inflation_times else None
+
+        time_end = first_inflation_time if first_inflation_time is not None else float(self.flight_forecast.apogee_time)
+        time_samples = self.get_time_samples(time_start=time_start, time_end=time_end)
+
+        if transform_openrocket:
+            # Transform body-frame angular velocity to the flow-aligned reference frame.
+            # pitch_rate = flow-aligned reference frame y-component = -sin(theta)*w1 + cos(theta)*w2
+            # yaw_rate   = flow-aligned reference frame x-component =  cos(theta)*w1 + sin(theta)*w2
+            # Matches OpenRocket AbstractSimulationStepper: pitchRate=rot.getY(), yawRate=rot.getX().
+
+            # Angular velocity (in body frame)
+            w1 = np.array([self.flight_forecast.w1(t) for t in time_samples])
+            w2 = np.array([self.flight_forecast.w2(t) for t in time_samples])
+
+            # Rocket orientation quaternions
+            quaternions = np.column_stack([
+                [self.flight_forecast.e1(t) for t in time_samples],
+                [self.flight_forecast.e2(t) for t in time_samples],
+                [self.flight_forecast.e3(t) for t in time_samples],
+                [self.flight_forecast.e0(t) for t in time_samples],
+            ])
+
+            # Airspeed in inertial frame: rocket velocity - wind (matches OpenRocket convention)
+            vx = np.array([self.flight_forecast.vx(t) for t in time_samples])
+            vy = np.array([self.flight_forecast.vy(t) for t in time_samples])
+            vz = np.array([self.flight_forecast.vz(t) for t in time_samples])
+            z_alts = np.array([self.flight_forecast.z(t) for t in time_samples])
+            wind_vx = np.array([self.flight_forecast.env.wind_velocity_x(z) for z in z_alts])
+            wind_vy = np.array([self.flight_forecast.env.wind_velocity_y(z) for z in z_alts])
+            airspeed_inertial = np.column_stack([vx - wind_vx, vy - wind_vy, vz])
+
+            # Rotate airspeed to body frame (inverse of rocket orientation)
+            airspeed_body = Rotation.from_quat(quaternions).inv().apply(airspeed_inertial)
+
+            # Theta = azimuthal angle of airspeed lateral component in body frame
+            len_xy = np.hypot(airspeed_body[:, 0], airspeed_body[:, 1])
+            valid = len_xy > 0.001
+            safe_len = np.where(valid, len_xy, 1.0)   # avoid division by zero
+            cos_theta = np.where(valid, airspeed_body[:, 0] / safe_len, 1.0)
+            sin_theta = np.where(valid, airspeed_body[:, 1] / safe_len, 0.0)
+
+            # invRotateZ by theta: rotate body frame around z by -theta
+            angular_rate_1 = np.degrees(-sin_theta * w1 + cos_theta * w2)   # pitch (flow-aligned reference frame y)
+            angular_rate_2 = np.degrees( cos_theta * w1 + sin_theta * w2)   # yaw   (flow-aligned reference frame x)
+            frame_label = "OpenRocket flow-aligned reference frame"
+        else:
+            angular_rate_1 = np.degrees(np.array([self.flight_forecast.w1(time) for time in time_samples], dtype=float))
+            angular_rate_2 = np.degrees(np.array([self.flight_forecast.w2(time) for time in time_samples], dtype=float))
+            frame_label = "RocketPy body reference frame"
+
+        angular_rate_3 = np.degrees(np.array([self.flight_forecast.w3(time) for time in time_samples], dtype=float))
+        
+        traces = [
+            {
+                "y": angular_rate_1,
+                "name": f"pitch rate [°/s]",
+                "hovertemplate": "pitch rate: %{y:.3f} °/s<extra></extra>",
+                "line": {"color": "royalblue"},
+            },
+            {
+                "y": angular_rate_2,
+                "name": f"yaw rate [°/s]",
+                "hovertemplate": "yaw rate: %{y:.3f} °/s<extra></extra>",
+                "line": {"color": "firebrick"},
+            },
+            {
+                "y": angular_rate_3,
+                "name": "roll rate [°/s]",
+                "hovertemplate": "roll rate: %{y:.3f} °/s<extra></extra>",
+                "line": {"color": "gold"},
+            },
+        ]
+
+        self.create_plotly_plot(
+            title=f"[{self.plot_title}] Angular velocity ({frame_label})",
+            time_samples=time_samples,
+            time_start=time_start,
+            time_end=time_end,
+            traces=traces,
+            yaxis_title="Angular rate [°/s]",
+            width=900,
+            height=500,
         )
         
+
         
     def plot_vertical_motion(self, time_interval=None):
         """
@@ -633,8 +771,8 @@ class CustomPlots:
             traces=traces,
             yaxis_title=title_yaxis,
             yaxis2_title=title_yaxis2,
-            width=1400,
-            height=850,
+            width=1300,
+            height=800,
         )
         
     @staticmethod
