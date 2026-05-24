@@ -5,6 +5,9 @@ Output and post-processing helpers for the RocketPy simulation backend.
 import csv
 from pathlib import Path
 
+import nbformat
+from nbconvert import HTMLExporter
+
 from matplotlib.path import Path as MatplotlibPath
 import numpy as np
 import plotly.graph_objects as go
@@ -179,7 +182,7 @@ def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_na
     custom_plots.plot_stability_and_cg_cp_position()
     # flight.plots.stability_and_control_data()
     custom_plots.plot_angle_of_attack_and_attitude_angle()
-    custom_plots.plot_angular_velocity(transform_openrocket=True)
+    custom_plots.plot_angular_velocity(transform_openrocket=False)
     custom_plots.plot_vertical_motion()
     flight.plots.trajectory_3d()
 
@@ -206,7 +209,7 @@ def compare_trajectories(constants, flights):
 
 
 # =============================================================================
-# Export KML
+# Exports
 # =============================================================================
 
 def export_all_kml(constants, variations):
@@ -256,6 +259,26 @@ def export_all_trajectory_csv(constants, variations):
             exported_files.append(file_path)
 
     return exported_files
+
+
+def export_notebook_to_html(notebook_path, output_path=None):
+    """
+    Export a Jupyter notebook with its current outputs to a self-contained HTML file.
+    Save the notebook first so the file on disk reflects the current state.
+    """
+    notebook_path = Path(notebook_path)
+
+    if output_path is None:
+        output_path = notebook_path.with_suffix(".html")
+
+    output_path = Path(output_path)
+
+    nb = nbformat.read(notebook_path, as_version=4)
+    html_body, _ = HTMLExporter().from_notebook_node(nb)
+    output_path.write_text(html_body, encoding="utf-8")
+
+    print(f"Notebook exported to: {output_path}")
+    return output_path
 
 
 # =============================================================================
