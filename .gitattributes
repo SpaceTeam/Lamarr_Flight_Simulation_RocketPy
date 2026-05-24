@@ -1,12 +1,6 @@
-# Strip cell outputs and metadata from simulation_orchestration.ipynb before staging.
-# Reason: reduces committed file size. Other notebooks keep their outputs.
-#
-# Setup (run once per clone, inside the repo):
-#   pip install nbstripout
-#   git config filter.nbstripout.clean "python -m nbstripout"
-#   git config filter.nbstripout.smudge cat
-#   git config filter.nbstripout.required true
-#
-# Do NOT run "nbstripout --install" — it adds "*.ipynb" to .git/info/attributes,
-# which overrides this file and strips outputs from all notebooks.
-simulation_orchestration.ipynb filter=nbstripout
+# Strip cell outputs and metadata from Jupyter notebooks before they are staged for commit.
+# Reason: reduces committed file size and thus prevents having to use LFS.
+# Requires installation per repo:
+#   - pip install nbstripout
+#   - in the repo containing the .git folder: nbstripout --install
+*.ipynb filter=nbstripout
