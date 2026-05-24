@@ -2,6 +2,7 @@
 Output and post-processing helpers for the RocketPy simulation backend.
 """
 
+import csv
 from pathlib import Path
 
 from matplotlib.path import Path as MatplotlibPath
@@ -177,7 +178,8 @@ def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_na
 
     custom_plots.plot_stability_and_cg_cp_position()
     # flight.plots.stability_and_control_data()
-    custom_plots.plot_angle_of_attack()
+    custom_plots.plot_angle_of_attack_and_attitude_angle()
+    custom_plots.plot_angular_velocity(transform_openrocket=True)
     custom_plots.plot_vertical_motion()
     flight.plots.trajectory_3d()
 
@@ -221,6 +223,36 @@ def export_all_kml(constants, variations):
             file_name = Path(f"flight_{i}_{flight.filename_label}.kml")
             file_path = project_path / "trajectory_kml" / file_name
             FlightDataExporter(flight).export_kml(file_name=file_path, altitude_mode="relativetoground")
+            exported_files.append(file_path)
+
+    return exported_files
+
+
+def export_all_trajectory_csv(constants, variations):
+    """
+    Export one CSV per flight with columns latitude, longitude, altitude (m AGL) sampled at every ODE time step.
+    By request for WARR, maybe useful, otherwise remove later.
+    """
+    exported_files = []
+    project_path = constants["project_path"]
+    utils.ensure_project_folders(project_path)
+
+    for i, scenario_set in enumerate(collect_scenario_sets(constants, variations), start=1):
+        for scenario_name, flight in scenario_set.items():
+            times = flight.latitude.source[:, 0]
+
+            file_name = Path(f"flight_{i}_{scenario_name}_{flight.filename_label}.csv")
+            file_path = project_path / "trajectory_csv" / file_name
+
+            with open(file_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["time", "latitude", "longitude", "altitude"])
+
+                elevation = flight.env.elevation
+
+                for t in times:
+                    writer.writerow([t, flight.latitude(t), flight.longitude(t), flight.z(t) - elevation])  # altitude above ground level
+
             exported_files.append(file_path)
 
     return exported_files
@@ -287,7 +319,57 @@ def print_configurations(title, configurations):
 
         for environment, inclinations in sorted(environments.items()):
             print(f"- {environment}: inclinations {sorted(inclinations)}")
+            
+            
+def print_safe_flight_details(constants, variations):
+    """
+    Print lat/lon landing coordinates for every safe flight.
+    """
+    utils.printmd("## Safe flight details")
 
+    # Collect all safe flights with their scenario type label.
+    type_keys = [
+        ("nominal",  "safe_rocket_nominal"),
+        ("no_main",  "safe_rocket_no_main"),
+        ("ballistic","safe_rocket_ballistic"),
+        ("payload",  "safe_payload"),
+    ]
+
+    # Build: {heading: {inclination: {type: [(env_name, lat, lon)]}}}
+    grouped = {}
+
+    for type_label, key in type_keys:
+        flights = get_registered_flights(constants, variations, key)
+
+        for flight in flights:
+            heading = flight.heading
+            inclination = flight.inclination
+            env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
+            lat = flight.latitude(flight.t_final)
+            lon = flight.longitude(flight.t_final)
+            grouped.setdefault(heading, {}).setdefault(inclination, {}).setdefault(type_label, []).append((env_name, lat, lon))
+
+    if not grouped:
+        print("None")
+        return
+
+    for heading in sorted(grouped):
+        print(f"\nHeading {heading}°:")
+
+        for inclination in sorted(grouped[heading]):
+            print(f"  Inclination {inclination}°:")
+
+            for type_label in ("nominal", "no_main", "ballistic", "payload"):
+                entries = grouped[heading][inclination].get(type_label)
+
+                if not entries:
+                    continue
+
+                print(f"    {type_label}:")
+
+                for env_name, lat, lon in sorted(entries, key=lambda item: item[0]):
+                    print(f"      {env_name}: lat={lat}°, lon={lon}°")
+                    
 
 def print_unsafe_details(unsafe_details):
     """
@@ -446,6 +528,7 @@ def calculate_safe_flights(constants, variations, buffer_zones):
     constants, variations = utils.register("unsafe_payload", unsafe_payload_flights, constants, variations)
 
     print_configurations("Safe Configurations by Heading", utils.lookup("safe_configurations", constants, variations)[0])
+    print_safe_flight_details(constants, variations)
     print_configurations("Unsafe Configurations by Heading", utils.lookup("unsafe_configurations", constants, variations)[0])
     print_unsafe_details(unsafe_details)
 
