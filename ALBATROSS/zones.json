@@ -2,13 +2,26 @@
     "_comment": "Coordinates: [distance_m, heading_deg] from the launch rail. heading: 0 = North, 90 = East, clockwise.",
     "exclusion_zones": {
         "Spectators and Houses": [
-            [64.32, 80],
-            [216.31, 107.32],
-            [224.18, 140.66],
-            [38.61, 154.1]
+            [58.69, 70.19],
+            [205.4, 105.61],
+            [212.97, 141.1],
+            [27.47, 162.5]
+        ],
+        "Houses": [
+            [740.54, 305.3],
+            [797.96, 306.67],
+            [849.34, 300.39],
+            [789.92, 298.54]
         ]
     },
 
-    "buffer_zones": {},
+    "buffer_zones": {
+        "Forest": [
+            [411.3, 355.4],
+            [488.86, 341.85],
+            [535.8, 345.84],
+            [453.38, 1.04]
+        ]
+    },
     "exclusion_zone_saftey_margin": 1.3
 }
