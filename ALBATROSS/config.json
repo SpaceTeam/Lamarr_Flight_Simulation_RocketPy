@@ -17,17 +17,17 @@
       "         - reanalysis_custom uses existing CSV files from previous exports with export_weather_data.py."
     ],
     "_date": "tomorrow_08_local",
-    "date": [2026, 5, 23, 12, 0, 0],
-    "latitude": 48.8038856,
-    "longitude": 12.5485937,
+    "date": [2026, 5, 23, 13, 12, 0],
+    "latitude": 48.8038043,
+    "longitude": 12.5487077,
     "max_expected_height": 700,
-    "elevation": 353.98,
+    "elevation": 355.45,
     "timezone": "Europe/Berlin",
-    "envType": ["Windy", "custom_atmosphere"],
-    "_envType": ["reanalysis_custom"],
-    "windy_weather_models": ["ICONEU"],
-    "custom_weather_models": ["icon_d2", "icon_eu"],
-    "_reanalysis_csv": ["rocketpy_atmosphere_icon_d2_reanalysis.csv", "rocketpy_atmosphere_icon_eu_reanalysis.csv"]
+    "_envType": ["Windy", "custom_atmosphere"],
+    "envType": ["reanalysis_custom"],
+    "_windy_weather_models": ["ICONEU"],
+    "_custom_weather_models": ["icon_d2", "icon_eu"],
+    "reanalysis_csv": {"icon_d2": "rocketpy_atmosphere_icon_d2_reanalysis.csv"}
   },
 
   "engine": {
@@ -84,7 +84,8 @@
 
   "railbuttons": {
     "_comment": "[mm] upper_from_tip, lower_from_tip (measured FROM TIP!)",
-    "upper_from_tip": 2385,
+    "_upper_from_tip": 2385,
+    "upper_from_tip": 1738,
     "lower_from_tip": 3431
   },
 
@@ -153,10 +154,10 @@
       " - a list of specific values, e.g. [86, 87, 90]"
     ],
     "rail_length": 7,
-    "_inclination": 85,
-    "inclination": "84..88:2",
-    "_heading": 300,
-    "heading": "250..10:10"
+    "inclination": 88,
+    "_inclination": "84..88:2",
+    "heading": 350,
+    "_heading": "340..360:10"
   },
 
   "payload": {
