@@ -610,4 +610,5 @@ def ensure_project_folders(project_path: Path):
     project_path.mkdir(parents=True, exist_ok=True)
     (project_path / "plots").mkdir(exist_ok=True)
     (project_path / "trajectory_kml").mkdir(exist_ok=True)
+    (project_path / "trajectory_csv").mkdir(exist_ok=True)
     (project_path / "weather_csvs").mkdir(exist_ok=True)
