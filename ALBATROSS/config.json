@@ -163,5 +163,24 @@
   "payload": {
     "_comment": "[g] mass_total. Use 0 when no deployable payload is separated.",
     "mass_total": 0
+  },
+
+  "reanalysis": {
+    "_comment":"Add sources as a list. Choose from: cats_vega, altimax, rcu",
+    "sources": ["cats_vega"],
+
+    "matched_flight": {
+      "_comment": "Time [s] to split in a matched flight (attitude+velocity+GNSS heading from CATS Vega data at that time). Omit this block to skip.",
+      "match_time": 1.6,
+      "motor": {
+        "_comment": "burn time as marked by CATS Vega",
+        "burn_time": 3
+      },
+      "parachutes": {
+        "main":   { "enabled": false },
+        "_comment": "RocketPy does not simulate drag for body tube. Use fake drogue for it.",
+        "drogue": { "cd_s": 0.1 }
+      }
+    }
   }
 }

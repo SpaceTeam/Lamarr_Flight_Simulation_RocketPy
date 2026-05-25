@@ -18,8 +18,7 @@ from rocketpy import Flight, Environment, Motor, Fins, Rocket
 import simulation.utils as utils
 from simulation.custom_print_and_plot_functions import CustomPlots, CustomPrints
 
-from IPython.display import display
-
+SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", "matched": "purple", "payload": "blue"}
 
 # =============================================================================
 # Generic flight collection helpers
@@ -159,12 +158,12 @@ def plot_one_rocket(rocket: Rocket):
     rocket.plots.thrust_to_weight()
 
 
-def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_name=None):
+def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_name=None, show_trajectory_3d=True):
     """
     Plot the same custom flight plots used in the Albatross notebook.
     """
-    rocket = utils.lookup("rocket", constants, variations)[0]
-    motor = utils.lookup("motor", constants, variations)[0]
+    rocket = flight.rocket
+    motor = flight.rocket.motor
     environment_name = flight.env.name if hasattr(flight.env, "name") else flight.name
     plot_label = environment_name
 
@@ -184,28 +183,77 @@ def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_na
     custom_plots.plot_angle_of_attack_and_attitude_angle()
     custom_plots.plot_angular_velocity(transform_openrocket=False)
     custom_plots.plot_vertical_motion()
-    flight.plots.trajectory_3d()
+
+    # In reanalysis mode, the combined trajectory plot already shows the relevant flight path.
+    if show_trajectory_3d:
+        flight.plots.trajectory_3d()
 
 
 # =============================================================================
 # Comparison plots
 # =============================================================================
 
-def compare_trajectories(constants, flights):
-    """
-    Draw 3D and 2D trajectory comparison plots for the given flights.
-    """
-    project_path = constants["project_path"]
-    utils.ensure_project_folders(project_path)
+def compare_trajectories(constants, variations, flights: list[Flight]):
+    """Interactive 3D trajectory plot for the given flights, with optional GNSS overlays from reanalysis."""
+    figure = go.Figure()
 
-    comparison = CompareFlights(flights)
-    # save to disk
-    comparison.trajectories_3d(figsize=(9,7), legend=True, filename=str(project_path / "plots" / "trajectories_3d_comparison.png"))
-    # display plot inline
-    comparison.trajectories_3d(figsize=(9,7), legend=True)
-    # comparison.trajectories_2d(legend=legend, filename=str(project_path / "plots" / "2d_xy.png"), plane="xy")
-    # comparison.trajectories_2d(legend=legend, filename=str(project_path / "plots" / "2d_xz.png"), plane="xz")
-    # comparison.trajectories_2d(legend=legend, filename=str(project_path / "plots" / "2d_yz.png"), plane="yz")
+    # Simulated traces: x, y already in local meters from launch; altitude is AGL
+    for flight in flights:
+        times = np.asarray(flight.time)
+        # flight.name is the full env-prefixed name (e.g. "Reanalysis_Custom_icon_d2_nominal");
+        # match the scenario keyword inside it so SCENARIO_COLORS still picks the right color (None falls back to Plotly auto-color).
+        color = next((color for scenario, color in SCENARIO_COLORS.items() if scenario in (getattr(flight, "name", "") or "")), None)
+        figure.add_trace(go.Scatter3d(
+            x=np.array([flight.x(t) for t in times]),
+            y=np.array([flight.y(t) for t in times]),
+            z=np.array([flight.altitude(t) for t in times]),
+            mode="lines",
+            name=flight.name,
+            line=dict(color=color, width=3) if color else dict(width=3),
+        ))
+
+    # GNSS trajectories (CATS Vega/RCU) if reanalysis has registered any (skip when not in a reanalysis run)
+    try:
+        gnss_traces = utils.lookup("gnss_3d_traces", constants, variations)[0]
+    except KeyError:
+        gnss_traces = None
+
+    if gnss_traces:
+        for trace in gnss_traces.values():
+            figure.add_trace(go.Scatter3d(
+                x=trace["x"], y=trace["y"], z=trace["z"],
+                mode="lines+markers",
+                name=trace["name"],
+                line=dict(color=trace["color"], width=3),
+                marker=dict(size=2),
+            ))
+
+    # Launch-rail reference marker at the origin
+    figure.add_trace(go.Scatter3d(
+        x=[0], y=[0], z=[0],
+        mode="markers",
+        marker=dict(color="black", symbol="x", size=4),
+        name="Launch",
+    ))
+
+    figure.update_layout(
+        title="3D Trajectory Comparison",
+        scene=dict(
+            xaxis_title="East / West [m]",
+            yaxis_title="North / South [m]",
+            zaxis_title="Altitude AGL [m]",
+            aspectmode="data",
+            camera=dict(
+                # x rotates camera east with pos values
+                # y rotates camera north with pos values
+                # z controls elevation: bigger = looking down at a steeper angle
+                eye=dict(x=0.1, y=-2.3, z=0.2),
+            ),
+        ),
+        width=900,
+        height=700,
+    )
+    figure.show(renderer="notebook")
 
 
 # =============================================================================
@@ -355,6 +403,7 @@ def print_safe_flight_details(constants, variations):
         ("nominal",  "safe_rocket_nominal"),
         ("no_main",  "safe_rocket_no_main"),
         ("ballistic","safe_rocket_ballistic"),
+        ("matched",  "safe_rocket_matched"),
         ("payload",  "safe_payload"),
     ]
 
@@ -456,11 +505,12 @@ def flight_lands_in_zone(flight, zones):
 
 def split_flights_by_scenario(scenario_sets):
     """
-    Split scenario-set dictionaries into nominal, no-main, and ballistic flight lists.
+    Split scenario-set dictionaries into nominal, no-main, ballistic, and matched flight lists.
     """
     nominal_flights = []
     no_main_flights = []
     ballistic_flights = []
+    matched_flights = []
 
     for scenario_set in scenario_sets:
         if "nominal" in scenario_set:
@@ -472,19 +522,23 @@ def split_flights_by_scenario(scenario_sets):
         if "ballistic" in scenario_set:
             ballistic_flights.append(scenario_set["ballistic"])
 
-    return nominal_flights, no_main_flights, ballistic_flights
+        if "matched" in scenario_set:
+            matched_flights.append(scenario_set["matched"])
+
+    return nominal_flights, no_main_flights, ballistic_flights, matched_flights
 
 
 def register_safety_results(constants, variations, prefix, scenario_sets):
     """
-    Register nominal, no-main, ballistic, and configuration lists for a safety result group.
+    Register nominal, no-main, ballistic, matched, and configuration lists for a safety result group.
     """
-    nominal_flights, no_main_flights, ballistic_flights = split_flights_by_scenario(scenario_sets)
+    nominal_flights, no_main_flights, ballistic_flights, matched_flights = split_flights_by_scenario(scenario_sets)
     configurations = sorted({scenario_config_key(flight) for flight in nominal_flights})
 
     constants, variations = utils.register(f"{prefix}_rocket_nominal", nominal_flights, constants, variations)
     constants, variations = utils.register(f"{prefix}_rocket_no_main", no_main_flights, constants, variations)
     constants, variations = utils.register(f"{prefix}_rocket_ballistic", ballistic_flights, constants, variations)
+    constants, variations = utils.register(f"{prefix}_rocket_matched", matched_flights, constants, variations)
     variations[f"{prefix}_configurations"] = configurations
 
     return constants, variations
@@ -566,21 +620,23 @@ def build_safe_unsafe_flight_groups(constants, variations):
     Build the safe and unsafe flight-group dicts from the registered safety lists.
     """
     safe_flight_groups = {
-        "rocket_nominal": (get_registered_flights(constants, variations, "safe_rocket_nominal"), "green"),
-        "rocket_no_main": (get_registered_flights(constants, variations, "safe_rocket_no_main"), "orange"),
-        "rocket_ballistic": (get_registered_flights(constants, variations, "safe_rocket_ballistic"), "red"),
+        "rocket_nominal": (get_registered_flights(constants, variations, "safe_rocket_nominal"), SCENARIO_COLORS["nominal"]),
+        "rocket_no_main": (get_registered_flights(constants, variations, "safe_rocket_no_main"), SCENARIO_COLORS["no_main"]),
+        "rocket_ballistic": (get_registered_flights(constants, variations, "safe_rocket_ballistic"), SCENARIO_COLORS["ballistic"]),
+        "rocket_matched": (get_registered_flights(constants, variations, "safe_rocket_matched"), SCENARIO_COLORS["matched"]),
     }
     unsafe_flight_groups = {
-        "rocket_nominal": (get_registered_flights(constants, variations, "unsafe_rocket_nominal"), "green"),
-        "rocket_no_main": (get_registered_flights(constants, variations, "unsafe_rocket_no_main"), "orange"),
-        "rocket_ballistic": (get_registered_flights(constants, variations, "unsafe_rocket_ballistic"), "red"),
+        "rocket_nominal": (get_registered_flights(constants, variations, "unsafe_rocket_nominal"), SCENARIO_COLORS["nominal"]),
+        "rocket_no_main": (get_registered_flights(constants, variations, "unsafe_rocket_no_main"), SCENARIO_COLORS["no_main"]),
+        "rocket_ballistic": (get_registered_flights(constants, variations, "unsafe_rocket_ballistic"), SCENARIO_COLORS["ballistic"]),
+        "rocket_matched": (get_registered_flights(constants, variations, "unsafe_rocket_matched"), SCENARIO_COLORS["matched"]),
     }
 
     safe_payload_flights = get_registered_flights(constants, variations, "safe_payload")
     unsafe_payload_flights = get_registered_flights(constants, variations, "unsafe_payload")
     if safe_payload_flights or unsafe_payload_flights:
-        safe_flight_groups["payload_nominal"] = (safe_payload_flights, "blue")
-        unsafe_flight_groups["payload_nominal"] = (unsafe_payload_flights, "blue")
+        safe_flight_groups["payload_nominal"] = (safe_payload_flights, SCENARIO_COLORS["payload"])
+        unsafe_flight_groups["payload_nominal"] = (unsafe_payload_flights, SCENARIO_COLORS["payload"])
 
     return safe_flight_groups, unsafe_flight_groups
 
@@ -724,13 +780,14 @@ def plot_landing_positions_with_modes(
     safety_by_config=None,
     zones_only=False,
     save_format="html",
+    flight_computer_impacts=None,
 ):
     """
     Build a landing-position plot of the buffer/exclusion zones, with optional flight-mode buttons.
 
     When `zones_only` is True only the zones are drawn. Otherwise one button per entry of
-    `mode_flight_groups` toggles which mode's flight markers are visible. The zones and the
-    launch-rail marker stay visible across every mode.
+    `mode_flight_groups` toggles which mode's flight markers are visible. The zones, the
+    launch-rail marker, and any flight-computer impact markers stay visible across every mode.
     """
     project_path = constants["project_path"]
     utils.ensure_project_folders(project_path)
@@ -772,14 +829,34 @@ def plot_landing_positions_with_modes(
         ))
         launch_trace_index = len(figure.data) - 1
 
+        # Flight-computer impact markers (CATS/RCU); always visible across modes
+        persistent_indices = [launch_trace_index]
+        for impact in (flight_computer_impacts or []):
+            figure.add_trace(go.Scatter(
+                x=[impact["x"]],
+                y=[impact["y"]],
+                mode="markers",
+                marker=dict(color=impact["color"], symbol="star", size=12),
+                name=impact["label"],
+                customdata=[[impact["lat"], impact["lon"]]],
+                hovertemplate=(
+                    f"<b>{impact['label']}</b><br>"
+                    "impact: (%{x:.1f}, %{y:.1f}) m<br>"
+                    "lat: %{customdata[0]:.5f}°; lon: %{customdata[1]:.5f}°"
+                    "<extra></extra>"
+                ),
+            ))
+            persistent_indices.append(len(figure.data) - 1)
+
         # Build one update button per mode; each sets a visibility and a showlegend array for all traces.
         total_traces = len(figure.data)
         for mode_name, (start, end) in mode_trace_ranges.items():
             visibility = [False] * total_traces
-            # Zones and the launch rail stay visible across modes.
+            # Zones, launch rail, and flight-computer impacts stay visible across modes.
             for trace_index in range(zone_trace_count):
                 visibility[trace_index] = True
-            visibility[launch_trace_index] = True
+            for trace_index in persistent_indices:
+                visibility[trace_index] = True
             # Show this mode's flight traces only.
             for trace_index in range(start, end):
                 visibility[trace_index] = True
@@ -787,7 +864,8 @@ def plot_landing_positions_with_modes(
             showlegend = [False] * total_traces
             for trace_index, legend_flag in enumerate(zone_legend_flags):
                 showlegend[trace_index] = legend_flag
-            showlegend[launch_trace_index] = True
+            for trace_index in persistent_indices:
+                showlegend[trace_index] = True
             for trace_index in range(start, end):
                 showlegend[trace_index] = True
 
@@ -851,7 +929,7 @@ def plot_landing_positions_with_modes(
     else:
         figure.write_html(str(project_path / "plots" / f"{plot_name}.html"))
 
-    display(figure)
+    figure.show(renderer="notebook")
 
 
 # =============================================================================
@@ -869,16 +947,17 @@ def run_notebook_display_mode(constants, variations, exclusion_zones, buffer_zon
     scenario_sets = collect_scenario_sets(constants, variations)
     payload_flights = get_registered_flights(constants, variations, "flight_payload")
 
-    nominal_flights, no_main_flights, ballistic_flights = split_flights_by_scenario(scenario_sets)
+    nominal_flights, no_main_flights, ballistic_flights, matched_flights = split_flights_by_scenario(scenario_sets)
     all_flight_groups = {
-        "rocket_nominal": (nominal_flights, "green"),
-        "rocket_no_main": (no_main_flights, "orange"),
-        "rocket_ballistic": (ballistic_flights, "red"),
+        "rocket_nominal": (nominal_flights, SCENARIO_COLORS["nominal"]),
+        "rocket_no_main": (no_main_flights, SCENARIO_COLORS["no_main"]),
+        "rocket_ballistic": (ballistic_flights, SCENARIO_COLORS["ballistic"]),
     }
+    if matched_flights:
+        all_flight_groups["rocket_matched"] = (matched_flights, SCENARIO_COLORS["matched"])
     if payload_flights:
-        all_flight_groups["payload_nominal"] = (payload_flights, "blue")
+        all_flight_groups["payload_nominal"] = (payload_flights, SCENARIO_COLORS["payload"])
 
-    print_scan_values(constants, variations)
     constants, variations = calculate_safe_flights(constants, variations, buffer_zones)
 
     safe_flight_groups, unsafe_flight_groups = build_safe_unsafe_flight_groups(constants, variations)
@@ -891,6 +970,12 @@ def run_notebook_display_mode(constants, variations, exclusion_zones, buffer_zon
     if any(flights for flights, _color in unsafe_flight_groups.values()):
         mode_flight_groups["Unsafe"] = unsafe_flight_groups
 
+    # Optional flight-computer impact markers (CATS/RCU), registered by reanalysis.run_reanalysis_comparison
+    try:
+        flight_computer_impacts = utils.ensure_list(utils.lookup("flight_computer_impacts", constants, variations)[0])
+    except KeyError:
+        flight_computer_impacts = None
+
     plot_landing_positions_with_modes(
         constants,
         exclusion_zones,
@@ -898,12 +983,17 @@ def run_notebook_display_mode(constants, variations, exclusion_zones, buffer_zon
         plot_name="landing_positions",
         mode_flight_groups=mode_flight_groups,
         safety_by_config=safety_by_config,
+        flight_computer_impacts=flight_computer_impacts,
     )
     
     if should_create_flight_plots(variations):
         all_flights = [flight for scenario_set in scenario_sets for flight in scenario_set.values()]
         all_flights.extend(payload_flights)
-        compare_trajectories(constants, all_flights)
+        compare_trajectories(constants, variations, all_flights)
+        show_single_flight_trajectory = not any(
+            getattr(flight.env, "name", "").startswith("Reanalysis")
+            for flight in all_flights
+        )
 
         for scenario_set in scenario_sets:
             for scenario_name, flight in scenario_set.items():
@@ -912,6 +1002,12 @@ def run_notebook_display_mode(constants, variations, exclusion_zones, buffer_zon
 
                 # Create the detailed notebook plots for this scenario and environment.
                 if OUTPUT_LEVEL >= 1:
-                    plot_one_flight_with_custom_plots(constants, variations, flight, scenario_name=scenario_name)
+                    plot_one_flight_with_custom_plots(
+                        constants,
+                        variations,
+                        flight,
+                        scenario_name=scenario_name,
+                        show_trajectory_3d=show_single_flight_trajectory,
+                    )
 
     return constants, variations

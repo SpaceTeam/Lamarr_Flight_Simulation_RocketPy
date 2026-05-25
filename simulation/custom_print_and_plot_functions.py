@@ -247,7 +247,57 @@ class CustomPlots:
             align="center",
             xshift=xshift,
         )
-    
+
+
+    def add_event_marker_lines(
+        self,
+        figure: go.Figure,
+        time_samples: np.ndarray,
+        event_markers: list[tuple[float, str, str]],
+    ):
+        """
+        Filter, sort, and draw vertical event marker lines on a Plotly figure.
+        """
+        # Keep only markers that have a time and fall inside the plotted time range.
+        plot_start_time = float(time_samples[0])
+        plot_end_time = float(time_samples[-1])
+        event_markers = [
+            event_marker
+            for event_marker in event_markers
+            if event_marker[0] is not None and plot_start_time <= event_marker[0] <= plot_end_time
+        ]
+
+        # Draw markers in time order so close labels can alternate sides predictably.
+        event_markers.sort(key=lambda event_marker: event_marker[0])
+
+        previous_event_time = None
+        close_event_threshold = 1.5
+        close_event_side = "left"
+
+        for event_time, label, color in event_markers:
+            annotation_side = "right"
+
+            # Alternate labels when event markers are close enough to overlap.
+            if previous_event_time is not None:
+                time_difference = event_time - previous_event_time
+
+                if time_difference <= close_event_threshold:
+                    annotation_side = close_event_side
+                    close_event_side = "right" if close_event_side == "left" else "left"
+                else:
+                    close_event_side = "left"
+
+            self.add_one_vertical_event_line(
+                figure=figure,
+                event_time=event_time,
+                label=label,
+                color=color,
+                annotation_side=annotation_side,
+            )
+
+            previous_event_time = event_time
+
+
     def add_vertical_event_markers(self, time_samples: np.ndarray, figure: go.Figure):
         """
         Add standard flight event markers to a Plotly figure.
@@ -303,45 +353,8 @@ class CustomPlots:
                 inflation_time = ejection_time + parachute.lag
                 event_markers.append((float(ejection_time),f"{parachute.name} parachute ejected; cd_s {parachute.cd_s:.2f} m²", "black"))
                 event_markers.append((float(inflation_time),f"{parachute.name} parachute inflated", "black"))
-
-        # --- sort markers by their time and drop those outside of the time range ---
-        plot_start_time = float(time_samples[0])
-        plot_end_time = float(time_samples[-1])
-
-        event_markers = [
-            event_marker
-            for event_marker in event_markers
-            if event_marker[0] is not None and plot_start_time <= event_marker[0] <= plot_end_time
-        ]
-
-        event_markers.sort(key=lambda event_marker: event_marker[0])
-
-        # --- place the text on the left and right for vertical lines that are too close to each other ---
-        previous_event_time = None
-        close_event_threshold = 0.5
-        close_event_side = "left"
-
-        for event_time, label, color in event_markers:
-            annotation_side = "right"       # default is right
-
-            if previous_event_time is not None:
-                time_difference = event_time - previous_event_time
-
-                if time_difference <= close_event_threshold:
-                    annotation_side = close_event_side
-                    close_event_side = "right" if close_event_side == "left" else "left"
-                else:
-                    close_event_side = "left"
-
-            self.add_one_vertical_event_line(
-                figure=figure,
-                event_time=event_time,
-                label=label,
-                color=color,
-                annotation_side=annotation_side,
-            )
-
-            previous_event_time = event_time
+                
+        self.add_event_marker_lines(figure, time_samples, event_markers)
 
 
     def create_plotly_plot(
@@ -357,6 +370,7 @@ class CustomPlots:
         yaxis2_dtick: float | int | None = None,
         width: int = 800,
         height: int = 500,
+        event_markers=None,
     ):
         """
         Create and display a Plotly plot with a shared x-axis, optional second y-axis,
@@ -383,7 +397,10 @@ class CustomPlots:
 
             figure.add_trace(go.Scatter(**scatter_options))
 
-        self.add_vertical_event_markers(time_samples, figure)
+        if event_markers is None:
+            self.add_vertical_event_markers(time_samples, figure)
+        else:
+            self.add_event_marker_lines(figure, time_samples, event_markers)
 
         yaxis_settings = {
             "title": yaxis_title,
@@ -539,6 +556,7 @@ class CustomPlots:
             - angle of attack(t): angle between the rocket's velocity vector and its longitudinal axis.
             - attitude angle(t): angle between the rocket's longitudinal axis and the local horizontal plane th earth's surface.
                 In OpenRocket the attitude angle is called "vertical orientation (zenith)".
+            - heading(t): angle from north to velocity vector in xy plane (0=north, 90=east)
         """
         time_start = 0.0
         
@@ -552,6 +570,11 @@ class CustomPlots:
         
         angle_of_attack = np.array([self.flight_forecast.angle_of_attack(time) for time in time_samples], dtype=float)
         attitude_angle = np.array([self.flight_forecast.attitude_angle(time) for time in time_samples], dtype=float)
+
+        # Heading (compass bearing of the velocity vector):
+        vx = np.array([self.flight_forecast.vx(time) for time in time_samples], dtype=float)
+        vy = np.array([self.flight_forecast.vy(time) for time in time_samples], dtype=float)
+        heading = np.degrees(np.arctan2(vx, vy)) % 360.0    # wrapped to [0, 360)
         
         traces = [
             {
@@ -566,15 +589,23 @@ class CustomPlots:
                 "hovertemplate": "Attitude angle: %{y:.2f} °<extra></extra>",
                 "line": {"color": "firebrick"},
             },
+            {
+                "y": heading,
+                "name": "Heading [°]",
+                "hovertemplate": "Heading: %{y:.2f} °<extra></extra>",
+                "line": {"color": "darkgreen"},
+                "yaxis": "y2",
+            },
         ]
 
         self.create_plotly_plot(
-            title=f"[{self.plot_title}] Angle of attack and attitude angle over time",
+            title=f"[{self.plot_title}] Angle of attack, attitude angle, and heading over time",
             time_samples=time_samples,
             time_start=time_start,
             time_end=time_end,
             traces=traces,
             yaxis_title="Angle [°]",
+            yaxis2_title="Heading [°]",
             width=900,
             height=500,
         )
@@ -698,7 +729,7 @@ class CustomPlots:
         
 
         
-    def plot_vertical_motion(self, time_interval=None):
+    def plot_vertical_motion(self, time_interval=None, event_markers=None):
         """
         Plot altitude, vertical velocity, and vertical acceleration over time.
         """
@@ -773,6 +804,7 @@ class CustomPlots:
             yaxis2_title=title_yaxis2,
             width=1300,
             height=800,
+            event_markers=event_markers,
         )
         
     @staticmethod

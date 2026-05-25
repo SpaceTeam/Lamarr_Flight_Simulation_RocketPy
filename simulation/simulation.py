@@ -952,7 +952,14 @@ def create_flight(constants, variations):
                 attach_meta(ascent_flight, meta)
                 ascent_flights_by_env[env_name].append(ascent_flight)
 
-            for scenario_name, rocket in scenario_rockets.items():
+            # In reanalysis mode: we only compare to the nominal flight and optionally to a copy of it (matched flight)
+            scenarios_for_env = (
+                {"nominal": scenario_rockets["nominal"]}
+                if env_name.startswith("Reanalysis")
+                else scenario_rockets
+            )
+
+            for scenario_name, rocket in scenarios_for_env.items():
                 # print(f"scenario_rockets={scenario_rockets}")
                 flight_options = {
                     "rocket": rocket,

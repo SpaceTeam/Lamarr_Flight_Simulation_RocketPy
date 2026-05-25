@@ -612,3 +612,6 @@ def ensure_project_folders(project_path: Path):
     (project_path / "trajectory_kml").mkdir(exist_ok=True)
     (project_path / "trajectory_csv").mkdir(exist_ok=True)
     (project_path / "weather_csvs").mkdir(exist_ok=True)
+    (project_path / "CATS_FLIGHT_DATA").mkdir(exist_ok=True)
+    (project_path / "ALTIMAX_FLIGHT_DATA").mkdir(exist_ok=True)
+    (project_path / "RCU_FLIGHT_DATA").mkdir(exist_ok=True)
