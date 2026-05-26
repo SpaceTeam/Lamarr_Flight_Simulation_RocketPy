@@ -31,6 +31,7 @@ from rocketpy import (
 from simulation.utils import *
 from simulation.export_weather_data import export_weather_data
 from simulation.outputs import *
+from simulation.custom_print_and_plot_functions import *
 from simulation import deployable_payload
 
 DEBUG = False
@@ -267,8 +268,10 @@ def create_environment(constants, variations, OUTPUT_LEVEL=0):
     if OUTPUT_LEVEL > 1:
         for name, env in environments.items():
             print_one_environment(env, name)
+            plot_wind_speed_and_heading(env, max_expected_height_asl)
+        if OUTPUT_LEVEL > 2:
             env.plots.atmospheric_model()
-
+            
     constants, variations = register("environments", environments, constants, variations)
 
     return constants, variations
