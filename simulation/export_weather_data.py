@@ -36,8 +36,9 @@ Units:
     - height / altitude in the output files is above sea level (ASL).
     - pressure is in Pa.
     - temperature is in K.
-    - wind_u: eastward component of physical velocity wind vector (positive eastward), magnitude of the wind vector is the wind speed in m/s.
-    - wind_v: northward component of physical velocity wind vector (positive northward), magnitude of the wind vector is the wind speed in m/s.
+    - wind_u: eastward component of physical velocity wind vector (positive eastward)
+    - wind_v: northward component of physical velocity wind vector (positive northward)
+    - wind_speed: magnitude of the wind vector in m/s.
     - Wind direction is meteorological direction in degrees: direction from which the wind is blowing.
 """
 
