@@ -2,9 +2,9 @@ import numpy as np
 from colorama import Fore, Style                                  # https://github.com/tartley/colorama
 import math
 from scipy.spatial.transform import Rotation
-from rocketpy import SolidMotor, LiquidMotor, HybridMotor, Rocket, Flight, Parachute
+from rocketpy import SolidMotor, LiquidMotor, HybridMotor, Rocket, Flight, Parachute, Environment
 import plotly.graph_objects as go
-
+import matplotlib.pyplot as plt
 
 class CustomPrints:
     """
@@ -904,3 +904,132 @@ class CustomPlots:
         )
 
         figure.show(renderer="notebook")
+
+
+def plot_wind_speed_and_heading(environment: Environment, max_expected_height_asl):
+    """
+    Plot wind speed and heading.
+
+    Wind heading describes the physical wind velocity vector and points where the wind is blowing:
+        0°   = wind blows north, comes from south
+        90°  = wind blows east, comes from west
+        
+    Its components are:
+        - wind_u: eastward component of the physical wind velocity vector
+        - wind_v: northward component of the physical wind velocity vector
+
+    Wind_speed: magnitude of the wind velocity vector.
+    
+    max_expected_height_asl needs to be passed to the function instead of using Environment.max_expected_height,
+    since RocketPy ignores it for some environments and uses the default 80.000 km.
+    
+    How Windy is Too Windy for a Launch? https://www.apogeerockets.com/Peak-of-Flight/Newsletter498
+    """
+    start_height = 0.0
+    end_height = max_expected_height_asl
+
+    height_samples = np.linspace(start_height, end_height, 100)
+
+    wind_speed = np.array([environment.wind_speed(z) for z in height_samples], dtype=float)
+    wind_u = np.array([environment.wind_velocity_x(z) for z in height_samples], dtype=float)
+    wind_v = np.array([environment.wind_velocity_y(z) for z in height_samples], dtype=float)
+
+    fig, axes = plt.subplots(
+        nrows=1,
+        ncols=2,
+        figsize=(6, 4.5),
+        sharey=True,
+        constrained_layout=True,
+    )
+
+    speed_axis = axes[0]
+    heading_axis = axes[1]
+
+    # -------------------------------------------------------------------------
+    # Left plot: wind speed
+    # -------------------------------------------------------------------------
+    speed_axis.plot(wind_speed, height_samples)
+
+    speed_axis.set_xlabel("Wind speed [m/s]")
+    speed_axis.set_ylabel("Height Above Sea Level [m]")
+    speed_axis.grid(True)
+
+    # -------------------------------------------------------------------------
+    # Right plot: wind heading as arrows
+    # -------------------------------------------------------------------------
+    arrow_x_positions = np.zeros_like(height_samples)
+
+    # Plot fewer arrows to avoid visual clutter.
+    arrow_step = max(1, len(height_samples) // 25)
+
+    heading_axis.quiver(
+        arrow_x_positions[::arrow_step],
+        height_samples[::arrow_step],
+        wind_u[::arrow_step],
+        wind_v[::arrow_step],
+        angles="uv",
+        scale_units="width",
+        scale=20,           # length of arrows (smaller values = longer arrows)
+        width=0.006,
+    )
+
+    heading_axis.set_xlabel("Wind heading")
+    heading_axis.grid(True)
+    heading_axis.set_xlim(-1.0, 1.0)
+
+    # Compass direction labels.
+    heading_axis.text(
+        0.5,
+        0.99,
+        "N",
+        transform=heading_axis.transAxes,
+        ha="center",
+        va="top",
+    )
+
+    heading_axis.text(
+        0.98,
+        0.5,
+        "E",
+        transform=heading_axis.transAxes,
+        ha="right",
+        va="center",
+    )
+    heading_axis.text(
+        0.5,
+        0.01,
+        "S",
+        transform=heading_axis.transAxes,
+        ha="center",
+        va="bottom",
+    )
+
+    heading_axis.text(
+        0.02,
+        0.5,
+        "W",
+        transform=heading_axis.transAxes,
+        ha="left",
+        va="center",
+    )
+
+    # -------------------------------------------------------------------------
+    # Launch site elevation reference line
+    # -------------------------------------------------------------------------
+    speed_axis.axhline(
+        environment.elevation,
+        linestyle="--",
+        linewidth=1.5,
+    )
+
+    speed_axis.annotate(
+        f"Elevation Launch Site: {environment.elevation:.1f} m",
+        xy=(0.98, environment.elevation),
+        xycoords=speed_axis.get_yaxis_transform(),
+        xytext=(0, -4),
+        textcoords="offset points",
+        va="top",
+        ha="right",
+    )
+
+    plt.show()
