@@ -81,8 +81,8 @@ def print_one_fin_set(fin_set: Fins):
     # fin_set.plots.airfoil()
     # fin_set.plots.roll()
     # fin_set.plots.lift()
-    
-    
+
+
 def print_one_rocket(rocket: Rocket, rocket_length_m):
     print(f"Rocket center of wet mass from tip: {(rocket_length_m - rocket.center_of_mass(0)) * 1000} mm")
     rocket.prints.inertia_details()
@@ -136,7 +136,7 @@ def plot_one_motor(motor: Motor):
     # motor.plots.burn_area()
     # motor.plots.Kn()
     motor.plots.inertia_tensor()
-    
+
 
 def plot_parachute_models(constants, variations):
     """
@@ -158,7 +158,7 @@ def plot_one_rocket(rocket: Rocket):
     rocket.plots.thrust_to_weight()
 
 
-def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_name=None, show_trajectory_3d=True):
+def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_name=None):
     """
     Plot the same custom flight plots used in the Albatross notebook.
     """
@@ -184,25 +184,98 @@ def plot_one_flight_with_custom_plots(constants, variations, flight, scenario_na
     custom_plots.plot_angular_velocity(transform_openrocket=False)
     custom_plots.plot_vertical_motion()
 
-    # In reanalysis mode, the combined trajectory plot already shows the relevant flight path.
-    if show_trajectory_3d:
-        flight.plots.trajectory_3d()
-
 
 # =============================================================================
 # Comparison plots
 # =============================================================================
 
+def add_plotly_buttons(
+    figure: go.Figure,
+    mode_trace_indices: dict[str, list[int]],
+    always_visible_indices: list[int],
+    zone_legend_flags: list[bool] | None = None,
+):
+    """
+    Build Plotly update-menu buttons that toggle trace visibility by mode, and apply them to the figure.
+
+    Args:
+        figure: The Plotly figure to which the buttons will be added.
+        mode_trace_indices: {mode_name: [list of trace indices]} - which traces to show per button
+        always_visible_indices: trace indices visible and in the legend for every mode (launch rail, etc.)
+        zone_legend_flags: one bool per zone trace - True means show in legend. Zone groups add one
+            trace per polygon but only show the first; this list restores those original flags when a button fires.
+    """
+    buttons = []
+    total_traces = len(figure.data)
+
+    for mode_name, indices in mode_trace_indices.items():
+        visibility = [False] * total_traces
+        showlegend = [False] * total_traces
+
+        for idx in always_visible_indices:
+            visibility[idx] = True
+            showlegend[idx] = True
+
+        # Zone traces may suppress showlegend for duplicate polygon entries; restore original flags.
+        if zone_legend_flags:
+            for zone_idx, flag in enumerate(zone_legend_flags):
+                showlegend[zone_idx] = flag
+
+        for idx in indices:
+            visibility[idx] = True
+            showlegend[idx] = True
+
+        buttons.append(dict(
+            label=mode_name,
+            method="update",
+            args=[{"visible": visibility, "showlegend": showlegend}],
+        ))
+
+    figure.update_layout(
+        updatemenus=[dict(
+            type="buttons",
+            direction="right",
+            buttons=buttons,
+            x=0.01,
+            xanchor="left",
+            y=1.02,
+            yanchor="bottom",
+            showactive=True,
+            bgcolor="white",
+            bordercolor="lightgray",
+        )]
+    )
+
+
 def compare_trajectories(constants, variations, flights: list[Flight]):
-    """Interactive 3D trajectory plot for the given flights, with optional GNSS overlays from reanalysis."""
+    """
+    Interactive 3D trajectory plot for the given flights, with optional GNSS overlays from reanalysis.
+    When multiple environments are present, buttons group traces by environment.
+    """
     figure = go.Figure()
 
-    # Simulated traces: x, y already in local meters from launch; altitude is AGL
+    # Build environment groups before adding any traces so we can track per-environment indices.
+    environment_flight_groups = {}
+    env_names_ordered = []
     for flight in flights:
+        env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
+        if env_name not in environment_flight_groups:
+            environment_flight_groups[env_name] = {"environment": flight.env, "flights": []}
+            env_names_ordered.append(env_name)
+        environment_flight_groups[env_name]["flights"].append(flight)
+
+    multiple_envs = len(env_names_ordered) > 1
+    env_trace_indices = {name: [] for name in env_names_ordered}
+
+    # -------------------------------------------------------------------------
+    # Simulated flight traces: x, y in local meters from launch; altitude is AGL
+    # -------------------------------------------------------------------------
+    for flight in flights:
+        env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
         times = np.asarray(flight.time)
-        # flight.name is the full env-prefixed name (e.g. "Reanalysis_Custom_icon_d2_nominal");
-        # match the scenario keyword inside it so SCENARIO_COLORS still picks the right color (None falls back to Plotly auto-color).
-        color = next((color for scenario, color in SCENARIO_COLORS.items() if scenario in (getattr(flight, "name", "") or "")), None)
+        # Match the scenario keyword inside the name so SCENARIO_COLORS picks the right color.
+        color = next((c for scenario, c in SCENARIO_COLORS.items() if scenario in (getattr(flight, "name", "") or "")), None)
+        idx = len(figure.data)
         figure.add_trace(go.Scatter3d(
             x=np.array([flight.x(t) for t in times]),
             y=np.array([flight.y(t) for t in times]),
@@ -211,15 +284,67 @@ def compare_trajectories(constants, variations, flights: list[Flight]):
             name=flight.name,
             line=dict(color=color, width=3) if color else dict(width=3),
         ))
+        env_trace_indices[env_name].append(idx)
 
-    # GNSS trajectories (CATS Vega/RCU) if reanalysis has registered any (skip when not in a reanalysis run)
+    # -------------------------------------------------------------------------
+    # Wind heading arrows, one cone column per environment
+    # -------------------------------------------------------------------------
+    for env_name, environment_group in environment_flight_groups.items():
+        environment = environment_group["environment"]
+        environment_flights = environment_group["flights"]
+
+        max_trajectory_altitude = max(
+            float(np.nanmax([flight.altitude(t) for t in np.asarray(flight.time)]))
+            for flight in environment_flights
+        )
+        wind_altitude_samples = np.linspace(0.0, max_trajectory_altitude, 20)
+
+        # RocketPy wind functions expect altitude ASL, so add environment.elevation.
+        wind_u = np.array([environment.wind_velocity_x(z + environment.elevation) for z in wind_altitude_samples], dtype=float)
+        wind_v = np.array([environment.wind_velocity_y(z + environment.elevation) for z in wind_altitude_samples], dtype=float)
+
+        wind_speed = np.array([environment.wind_speed(z + environment.elevation) for z in wind_altitude_samples], dtype=float)
+        wind_heading = np.array([environment.wind_heading(z + environment.elevation) for z in wind_altitude_samples], dtype=float)
+
+        idx = len(figure.data)
+        figure.add_trace(go.Cone(
+            x=np.zeros_like(wind_altitude_samples),
+            y=np.zeros_like(wind_altitude_samples),
+            z=wind_altitude_samples,
+            u=wind_u,
+            v=wind_v,
+            w=np.zeros_like(wind_altitude_samples),
+            name=f"Wind heading: {env_name}",
+            colorscale=[[0, "blue"], [1, "blue"]],
+            showscale=False,
+            showlegend=True,
+            sizemode="scaled",
+            sizeref=2.0,
+            anchor="tail",
+            customdata=np.column_stack([wind_speed, wind_heading]),
+            hovertemplate=(
+                "<b>Wind</b><br>"
+                "altitude: %{z:.0f} m AGL<br>"
+                "speed: %{customdata[0]:.1f} m/s<br>"
+                "heading: %{customdata[1]:.0f}°"
+                "<extra></extra>"
+            ),
+        ))
+        env_trace_indices[env_name].append(idx)
+
+    # -------------------------------------------------------------------------
+    # GNSS trajectories: follow the environment button when trace carries an "env" key
+    # -------------------------------------------------------------------------
     try:
         gnss_traces = utils.lookup("gnss_3d_traces", constants, variations)[0]
     except KeyError:
         gnss_traces = None
 
+    always_visible_indices = []
+
     if gnss_traces:
         for trace in gnss_traces.values():
+            idx = len(figure.data)
             figure.add_trace(go.Scatter3d(
                 x=trace["x"], y=trace["y"], z=trace["z"],
                 mode="lines+markers",
@@ -227,14 +352,39 @@ def compare_trajectories(constants, variations, flights: list[Flight]):
                 line=dict(color=trace["color"], width=3),
                 marker=dict(size=2),
             ))
+            gnss_env = trace.get("env")
+            if gnss_env and gnss_env in env_trace_indices:
+                env_trace_indices[gnss_env].append(idx)
+            else:
+                always_visible_indices.append(idx)
 
-    # Launch-rail reference marker at the origin
+    # -------------------------------------------------------------------------
+    # Launch-rail reference marker (always visible)
+    # -------------------------------------------------------------------------
+    launch_idx = len(figure.data)
     figure.add_trace(go.Scatter3d(
         x=[0], y=[0], z=[0],
         mode="markers",
         marker=dict(color="black", symbol="x", size=4),
         name="Launch",
     ))
+    always_visible_indices.append(launch_idx)
+
+    # -------------------------------------------------------------------------
+    # Environment-grouping buttons (only when multiple environments are present)
+    # -------------------------------------------------------------------------
+    if multiple_envs:
+        mode_trace_indices = {}
+        for env_name in env_names_ordered:
+            mode_trace_indices[env_name] = env_trace_indices[env_name]
+
+        # The first button is active by default; hide every trace that doesn't belong to it.
+        first_mode_indices = set(next(iter(mode_trace_indices.values())))
+        all_dynamic_indices = {idx for indices in env_trace_indices.values() for idx in indices}
+        for idx in all_dynamic_indices - first_mode_indices:
+            figure.data[idx].visible = False
+
+        add_plotly_buttons(figure, mode_trace_indices, always_visible_indices)
 
     figure.update_layout(
         title="3D Trajectory Comparison",
@@ -242,7 +392,7 @@ def compare_trajectories(constants, variations, flights: list[Flight]):
             xaxis_title="East / West [m]",
             yaxis_title="North / South [m]",
             zaxis_title="Altitude AGL [m]",
-            aspectmode="data",
+            aspectmode="cube",
             camera=dict(
                 # x rotates camera east with pos values
                 # y rotates camera north with pos values
@@ -253,6 +403,7 @@ def compare_trajectories(constants, variations, flights: list[Flight]):
         width=900,
         height=700,
     )
+
     figure.show(renderer="notebook")
 
 
@@ -390,8 +541,8 @@ def print_configurations(title, configurations):
 
         for environment, inclinations in sorted(environments.items()):
             print(f"- {environment}: inclinations {sorted(inclinations)}")
-            
-            
+
+
 def print_safe_flight_details(constants, variations):
     """
     Print lat/lon landing coordinates for every safe flight.
@@ -441,7 +592,7 @@ def print_safe_flight_details(constants, variations):
 
                 for env_name, lat, lon in sorted(entries, key=lambda item: item[0]):
                     print(f"      {env_name}: lat={lat}°, lon={lon}°")
-                    
+
 
 def print_unsafe_details(unsafe_details):
     """
@@ -797,8 +948,6 @@ def plot_landing_positions_with_modes(
     plot_zones(figure, buffer_zones, label="Buffer zone", color="orange")
     plot_zones(figure, exclusion_zones, label="Exclusion zone", color="red")
 
-    buttons = []
-
     if not zones_only:
         zone_trace_count = len(figure.data)
         zone_legend_flags = [trace.showlegend is not False for trace in figure.data]
@@ -849,38 +998,16 @@ def plot_landing_positions_with_modes(
             persistent_indices.append(len(figure.data) - 1)
 
         # Build one update button per mode; each sets a visibility and a showlegend array for all traces.
-        total_traces = len(figure.data)
-        for mode_name, (start, end) in mode_trace_ranges.items():
-            visibility = [False] * total_traces
-            # Zones, launch rail, and flight-computer impacts stay visible across modes.
-            for trace_index in range(zone_trace_count):
-                visibility[trace_index] = True
-            for trace_index in persistent_indices:
-                visibility[trace_index] = True
-            # Show this mode's flight traces only.
-            for trace_index in range(start, end):
-                visibility[trace_index] = True
+        always_visible_for_modes = list(range(zone_trace_count)) + persistent_indices
+        mode_trace_indices = {
+            mode_name: list(range(start, end))
+            for mode_name, (start, end) in mode_trace_ranges.items()
+        }
+        add_plotly_buttons(figure, mode_trace_indices, always_visible_for_modes, zone_legend_flags)
 
-            showlegend = [False] * total_traces
-            for trace_index, legend_flag in enumerate(zone_legend_flags):
-                showlegend[trace_index] = legend_flag
-            for trace_index in persistent_indices:
-                showlegend[trace_index] = True
-            for trace_index in range(start, end):
-                showlegend[trace_index] = True
-
-            buttons.append(dict(
-                label=mode_name,
-                method="update",
-                args=[{"visible": visibility, "showlegend": showlegend}],
-            ))
-
-    plot_titles = {
-        "landing_positions": "Landing Positions",
-    }
     layout_kwargs = dict(
         title=dict(
-            text=plot_titles.get(plot_name, plot_name.replace("_", " ").title()),
+            text="Landing Positions",
             x=0.5,
             xanchor="center",
         ),
@@ -906,19 +1033,6 @@ def plot_landing_positions_with_modes(
         paper_bgcolor="white",
         plot_bgcolor="white",
     )
-    if buttons:
-        layout_kwargs["updatemenus"] = [dict(
-            type="buttons",
-            direction="right",
-            buttons=buttons,
-            x=0.01,
-            xanchor="left",
-            y=1.02,
-            yanchor="bottom",
-            showactive=True,
-            bgcolor="white",
-            bordercolor="lightgray",
-        )]
     figure.update_layout(**layout_kwargs)
 
     add_compass_labels(figure)
@@ -990,10 +1104,6 @@ def run_notebook_display_mode(constants, variations, exclusion_zones, buffer_zon
         all_flights = [flight for scenario_set in scenario_sets for flight in scenario_set.values()]
         all_flights.extend(payload_flights)
         compare_trajectories(constants, variations, all_flights)
-        show_single_flight_trajectory = not any(
-            getattr(flight.env, "name", "").startswith("Reanalysis")
-            for flight in all_flights
-        )
 
         for scenario_set in scenario_sets:
             for scenario_name, flight in scenario_set.items():
@@ -1007,7 +1117,6 @@ def run_notebook_display_mode(constants, variations, exclusion_zones, buffer_zon
                         variations,
                         flight,
                         scenario_name=scenario_name,
-                        show_trajectory_3d=show_single_flight_trajectory,
                     )
 
     return constants, variations
