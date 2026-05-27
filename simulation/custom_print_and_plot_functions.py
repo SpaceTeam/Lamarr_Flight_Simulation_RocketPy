@@ -311,18 +311,26 @@ class CustomPlots:
     def get_standard_event_markers_for_flight(
         self,
         flight: Flight,
-        motor: SolidMotor | LiquidMotor | HybridMotor,
         time_samples: np.ndarray,
+        motor=None,
     ) -> list[tuple[float, str, str]]:
         """
-        Build the standard event marker list for one flight and its motor.
+        Build the standard event marker list for one flight. For RocketPy flights, motor is taken from
+        `flight.rocket.motor` so matched/spliced flights get their own (overridden) burnout. For flight-computer
+        data (no .rocket attribute), pass a `motor` explicitly to still draw the burnout marker.
         """
         if hasattr(flight, "out_of_rail_time"):
             out_of_rail_time = float(flight.out_of_rail_time)
         else:
             out_of_rail_time = None
 
-        burn_out_time = float(motor.burn_out_time)
+        # RocketPy flights carry their own motor; flight-computer data needs an explicit motor fallback.
+        if hasattr(flight, "rocket"):
+            burn_out_time = float(flight.rocket.motor.burn_out_time)
+        elif motor is not None:
+            burn_out_time = float(motor.burn_out_time)
+        else:
+            burn_out_time = None
 
         if hasattr(flight, "apogee_time"):
             apogee_time = float(flight.apogee_time)
@@ -645,7 +653,7 @@ class CustomPlots:
                     "time_start": time_start,
                     "time_end": time_end,
                     "traces": traces,
-                    "event_markers": self.get_standard_event_markers_for_flight(flight, motor, time_samples),
+                    "event_markers": self.get_standard_event_markers_for_flight(flight, time_samples, motor=motor),
                 }
             )
 
@@ -718,7 +726,7 @@ class CustomPlots:
                     "time_start": time_start,
                     "time_end": time_end,
                     "traces": traces,
-                    "event_markers": self.get_standard_event_markers_for_flight(flight, motor, time_samples),
+                    "event_markers": self.get_standard_event_markers_for_flight(flight, time_samples, motor=motor),
                 }
             )
 
@@ -847,7 +855,7 @@ class CustomPlots:
                     "time_start": time_start,
                     "time_end": time_end,
                     "traces": traces,
-                    "event_markers": self.get_standard_event_markers_for_flight(flight, motor, time_samples),
+                    "event_markers": self.get_standard_event_markers_for_flight(flight, time_samples, motor=motor),
                 }
             )
 
@@ -943,7 +951,7 @@ class CustomPlots:
             ]
 
             if custom_event_markers is None:
-                flight_event_markers = self.get_standard_event_markers_for_flight(flight, motor, time_samples)
+                flight_event_markers = self.get_standard_event_markers_for_flight(flight, time_samples, motor=motor)
             else:
                 flight_event_markers = custom_event_markers[flight_index]
 
