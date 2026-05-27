@@ -183,7 +183,7 @@ def create_environment(params: SimParams):
             file=get_project_file(params, env_config.reanalysis_file),
             dictionary=env_config.reanalysis_dictionary,
         )
-        params.runtime.type = "Reanalysis"
+        params.runtime.reanalysis_mode = True
         reanalysis_env.name = f"Reanalysis_{Path(env_config.reanalysis_file).stem}"
         set_labels(reanalysis_env)
         environments[reanalysis_env.name] = reanalysis_env
@@ -218,7 +218,7 @@ def create_environment(params: SimParams):
                 wind_u=wind_u_function,
                 wind_v=wind_v_function,
             )
-            params.runtime.mode_type = "Reanalysis"
+            params.runtime.reanalysis_mode = True
             reanalysis_env.name = f"Reanalysis_Custom_{model_name}"
             set_labels(reanalysis_env)
             environments[reanalysis_env.name] = reanalysis_env
