@@ -555,12 +555,13 @@ class CustomPlots:
 
         if self.save_dir is not None:
             # Build a unique filename from the first flight label + plot title, with filesystem-safe chars.
-            first_label = re.sub(r"[^\w\-]", "_", self.plot_titles[0])
+            # first_label = re.sub(r"[^\w\-]", "_", self.plot_titles[0])
             plot_slug  = re.sub(r"[^\w\-]", "_", title)
-            if is_single_group:
-                filename = f"{plot_slug}.html"                
-            else:
-                filename = f"{first_label}_{plot_slug}.html"
+            # if is_single_group:
+            #     filename = f"{plot_slug}.html"                
+            # else:
+            #     filename = f"{first_label}_{plot_slug}.html"
+            filename = f"{plot_slug}.html"    
             figure.write_html(str(self.save_dir / filename))
 
         figure.show(renderer="notebook")
