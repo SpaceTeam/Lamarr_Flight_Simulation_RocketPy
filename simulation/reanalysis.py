@@ -7,7 +7,7 @@ CATS Vega: https://github.com/catsystems/cats-embedded/raw/main/CATS%20User%20Ma
 
 import copy
 import inspect
-import warnings
+from functools import cached_property
 
 import numpy as np
 from rocketpy import EmptyMotor, Function, Flight, LiquidMotor, Motor, Parachute, SolidMotor
@@ -25,7 +25,6 @@ from simulation.config_schema import SimParams
 # =============================================================================
 # Flight-computer data locations
 # =============================================================================
-# TODO: maybe implement in config file instead?
 
 # Subfolders inside the project folder that hold each flight-computer's CSV dumps
 CATS_FOLDER = "CATS_FLIGHT_DATA"
@@ -136,7 +135,7 @@ def cats_event_markers(params: SimParams):
             event_markers.append((event_time, label, "gray"))
 
     return event_markers
-            
+
 
 # =============================================================================
 # Flight-computer data loading
@@ -191,7 +190,6 @@ def load_flight_computer_data(params: SimParams, sources):
     return data
 
 
-
 def _parachute_overrides_from_config(params: SimParams):
     """Extract per-parachute override dicts from the typed reanalysis config.
 
@@ -221,7 +219,7 @@ def _match_parameters_from_config(params: SimParams):
         return set()
     return set(matched.match_parameters)
 
-# TODO: maybe implement parachute and motor creation for the matched flight in simulation.py instead of here 
+# TODO: maybe implement parachute and motor creation for the matched flight in simulation.py instead of here
 # for less code duplication.
 
 def rebuild_motor_from_overrides(nominal_motor: Motor, overrides: dict, params=None):
@@ -409,41 +407,137 @@ def compute_cats_gnss_heading_at_times(params: SimParams, times, window_half_wid
     return headings
 
 
-def create_matched_flight(nominal_flight: Flight, params: SimParams, t_match, data=None, parachute_overrides=None, motor_overrides=None, match_parameters=None):
+def _warm_matched_flight_cache(flight: Flight):
+    """Touch the key derived attributes so RocketPy populates its lazy caches (post-process array + ax/ay/az/etc.) before we shallow-copy."""
+    # Accessing .acceleration cascades through ax/ay/az which compute __evaluate_post_process
+    for attr in ("acceleration", "alpha1", "alpha2", "alpha3", "R1", "R2", "R3", "M1", "M2", "M3", "net_thrust"):
+        try:
+            getattr(flight, attr)
+        except Exception:
+            pass
+
+
+def _splice_at(nominal_arr, matched_arr, splice_time):
+    """Return nominal samples with time <= splice_time stacked above matched samples with time >= splice_time."""
+    # 1D time array: values are the timestamps themselves
+    if nominal_arr.ndim == 1:
+        return np.concatenate([nominal_arr[nominal_arr <= splice_time], matched_arr[matched_arr >= splice_time]])
+    # 2D state/source array: time lives in column 0
+    return np.vstack([nominal_arr[nominal_arr[:, 0] <= splice_time], matched_arr[matched_arr[:, 0] >= splice_time]])
+
+
+def splice_matched_flight_in_place(spliced_flight: Flight, nominal_flight: Flight, splice_time):
+    """
+    Mutate a (copy of a) matched Flight so its solution/time arrays and post-process data cover the
+    spliced trajectory: nominal samples for t <= splice_time + matched samples for t >= splice_time.
+    All funcify Functions and cached_property derivatives inherited from the matched cache are dropped
+    so they lazily rebuild from the spliced primitives on next access.
+    """
+    # Splice the solution array; RocketPy stores it as a list
+    combined_solution = _splice_at(np.asarray(nominal_flight.solution), np.asarray(spliced_flight.solution), splice_time)
+    spliced_flight.solution = combined_solution.tolist()
+
+    # Splice the time array; used by KML export and CustomPlots
+    spliced_flight.time = _splice_at(np.asarray(nominal_flight.time), np.asarray(spliced_flight.time), splice_time)
+
+    # Matched started mid-air, so its rail-exit/initial-time values are bogus; take t_initial from nominal
+    # and re-derive out_of_rail_time from the spliced trajectory. out_of_rail_velocity follows automatically
+    # because it is a @property reading self.speed(out_of_rail_time).
+    spliced_flight.t_initial = nominal_flight.t_initial
+    effective_rail_length = getattr(nominal_flight, "effective_1rl", None)
+    if effective_rail_length is not None:
+        # Solution columns: [t, x, y, z, vx, vy, vz, e0..e3, w1..w3]
+        solution_arr = np.asarray(spliced_flight.solution)
+        rail_exit_time = find_rail_exit_time(solution_arr[:, 0], solution_arr[:, 1:4], effective_rail_length)
+        if rail_exit_time is not None:
+            spliced_flight.out_of_rail_time = rail_exit_time
+
+    # Splice __evaluate_post_process (the cached Nx13 ndarray that feeds ax/ay/az/alpha/R/M/net_thrust).
+    # Matched's was warmed before the shallow copy; force nominal's via .acceleration access so we have both halves.
+    post_process_key = f"_{type(nominal_flight).__name__}__evaluate_post_process"
+    _ = nominal_flight.acceleration
+    nominal_pp = nominal_flight.__dict__.get(post_process_key)
+    matched_pp = spliced_flight.__dict__.get(post_process_key)
+    if isinstance(nominal_pp, np.ndarray) and isinstance(matched_pp, np.ndarray):
+        spliced_flight.__dict__[post_process_key] = _splice_at(nominal_pp, matched_pp, splice_time)
+
+    # Drop every cached funcify Function and cached_property carried over from the matched shallow copy,
+    # so dependent values (vx, ax, speed, acceleration, ax_body_frame, ...) lazily rebuild from the spliced
+    # solution + post-process instead of returning the stale matched-only caches.
+    flight_cls = type(spliced_flight)
+    for attr_name in list(spliced_flight.__dict__):
+        if attr_name == post_process_key:
+            continue
+        try:
+            cls_attr = inspect.getattr_static(flight_cls, attr_name)
+        except AttributeError:
+            continue
+        if isinstance(cls_attr, cached_property) or cls_attr.__class__.__name__ == "funcify_method_decorator":
+            del spliced_flight.__dict__[attr_name]
+
+    # `flight.prints` / `flight.plots` are helper objects holding `self.flight = <flight>`. The shallow copy
+    # left them pointing at the original matched flight, so `spliced.prints.out_of_rail_conditions()` was
+    # reading matched's values instead of spliced's. Rebuild them with the spliced flight as their target.
+    spliced_flight.prints = type(spliced_flight.prints)(spliced_flight)
+    spliced_flight.plots = type(spliced_flight.plots)(spliced_flight)
+
+
+def create_matched_flight(
+    nominal_flight: Flight,
+    params: SimParams,
+    t_match,
+    data=None,
+    parachute_overrides=None,
+    motor_overrides=None,
+    match_parameters=None,
+):
     """
     Create a Flight that branches off nominal at t_match, optionally matching heading, inclination, and velocity
     to flight-computer data. Which parameters to match is controlled by match_parameters.
+    
+    https://docs.rocketpy.org/en/develop/user/flight.html#initial-conditions
     """
     match_parameters = match_parameters or set()
     match_heading = "heading" in match_parameters
     match_inclination = "inclination" in match_parameters
     match_velocity = "velocity" in match_parameters
 
-    # Sample the 14-element RocketPy state vector [t, x, y, z, vx, vy, vz, e0..e3, w1..w3] from a Flight at time t.
-    state = [
-        t_match,
-        float(nominal_flight.x(t_match)), float(nominal_flight.y(t_match)), float(nominal_flight.z(t_match)),
-        float(nominal_flight.vx(t_match)), float(nominal_flight.vy(t_match)), float(nominal_flight.vz(t_match)),
-        float(nominal_flight.e0(t_match)), float(nominal_flight.e1(t_match)), float(nominal_flight.e2(t_match)), float(nominal_flight.e3(t_match)),
-        float(nominal_flight.w1(t_match)), float(nominal_flight.w2(t_match)), float(nominal_flight.w3(t_match)),
+    # Sample the 14-element RocketPy state vector [t, x, y, z, vx, vy, vz, e0..e3, w1..w3] from nominal_flight at time t.
+    initial_solution = [
+        t_match,                            # Initial time (s)
+        nominal_flight.x(t_match),          # Initial X position - East coordinate (m)
+        nominal_flight.y(t_match),          # Initial Y position - North coordinate (m)
+        nominal_flight.z(t_match),          # Initial Z position - altitude above launch site (m)
+        nominal_flight.vx(t_match),         # Initial velocity in X direction - East (m/s)
+        nominal_flight.vy(t_match),         # Initial velocity in Y direction - North (m/s)
+        nominal_flight.vz(t_match),         # Initial velocity in Z direction - upward (m/s)
+        nominal_flight.e0(t_match),         # Initial Euler parameter 0 (quaternion scalar part)
+        nominal_flight.e1(t_match),         # Initial Euler parameter 1 (quaternion i component)
+        nominal_flight.e2(t_match),         # Initial Euler parameter 2 (quaternion j component)
+        nominal_flight.e3(t_match),         # Initial Euler parameter 3 (quaternion k component)
+        nominal_flight.w1(t_match),         # Initial angular velocity about rocket's x-axis (rad/s)
+        nominal_flight.w2(t_match),         # Initial angular velocity about rocket's y-axis (rad/s)
+        nominal_flight.w3(t_match)          # Initial angular velocity about rocket's z-axis (rad/s)
     ]
 
-    # Sim rotation: RocketPy uses (e0=w, e1=x, e2=y, e3=z); scipy expects (x, y, z, w)
-    sim_quat_wxyz = state[7:11]
-    sim_rotation = Rotation.from_quat([sim_quat_wxyz[1], sim_quat_wxyz[2], sim_quat_wxyz[3], sim_quat_wxyz[0]])
-    # RocketPy body +Z is the rocket longitudinal axis
+    # Quaternion convention: RocketPy stores (e0=w, e1=x, e2=y, e3=z); scipy expects (x, y, z, w)
+    quaternions_wxyz = initial_solution[7:11]
+    sim_rotation = Rotation.from_quat(
+        [quaternions_wxyz[0], quaternions_wxyz[1], quaternions_wxyz[2], quaternions_wxyz[3]], scalar_first=True
+    )
+    # Rocket longitudinal axis in world (ENU) frame — RocketPy's body +Z is the rocket axis
     sim_rocket_axis_world = sim_rotation.apply([0.0, 0.0, 1.0])
 
-    # Pitch from CATS quaternion or from the nominal simulation
+    # Pitch: from CATS quaternion when matching inclination, otherwise from the nominal sim
     if match_inclination:
-        # CATS rocket axis in its own world frame — Z component is the pitch (earth-true); X/Y are bogus (sensor-fixed frame)
+        # On CATS only the Z component is earth-true; X/Y are in a sensor-fixed frame and unreliable
         cats_rotation = Rotation.from_quat(cats_quaternion_at(params, t_match))
         cats_rocket_axis_cats_world = cats_rotation.apply([0.0, 0.0, -1.0])
         pitch_from_vertical_rad = float(np.arccos(np.clip(cats_rocket_axis_cats_world[2], -1.0, 1.0)))
     else:
         pitch_from_vertical_rad = float(np.arccos(np.clip(sim_rocket_axis_world[2], -1.0, 1.0)))
 
-    # GNSS-derived heading or nominal simulation heading
+    # Heading: from GNSS bearing when matching heading, otherwise from the nominal sim
     heading_rad = None
     if match_heading and data is not None:
         for source_key in ("cats_vega", "rcu"):
@@ -456,49 +550,41 @@ def create_matched_flight(nominal_flight: Flight, params: SimParams, t_match, da
         if heading_rad is None:
             print("[reanalysis] create_matched_flight: heading=True but no GNSS bearing available, using nominal heading.")
     if heading_rad is None:
-        # Use the nominal simulation azimuth as fallback (arctan2 of the ENU east/north components)
         heading_rad = float(np.arctan2(sim_rocket_axis_world[0], sim_rocket_axis_world[1]))
 
-    # Build the desired rocket axis in earth (ENU) frame from pitch + heading.
-    # When neither is matched both values come from the nominal sim, so desired_axis == sim_rocket_axis and correction = identity.
+    # Desired rocket axis in ENU; when neither parameter is matched this equals sim_rocket_axis (no correction)
     desired_axis_world = np.array([
         np.sin(pitch_from_vertical_rad) * np.sin(heading_rad),    # east  (X)
         np.sin(pitch_from_vertical_rad) * np.cos(heading_rad),    # north (Y)
         np.cos(pitch_from_vertical_rad),                          # up    (Z)
     ])
 
-    # Shortest-path correction that maps simulation rocket axis onto the desired axis
+    # Shortest-path rotation that maps sim_rocket_axis onto desired_axis
     vec_from = sim_rocket_axis_world / np.linalg.norm(sim_rocket_axis_world)
     vec_to = desired_axis_world / np.linalg.norm(desired_axis_world)
     dot = float(np.dot(vec_from, vec_to))
-
-    # Already aligned: no rotation needed
     if dot > 1.0 - 1e-9:
+        # Already aligned
         correction = Rotation.identity()
-
-    # Opposite vectors: 180° around any perpendicular axis
     elif dot < -1.0 + 1e-9:
+        # Opposite vectors: 180° around any perpendicular axis
         perpendicular = np.array([1.0, 0.0, 0.0]) if abs(vec_from[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
         axis = np.cross(vec_from, perpendicular)
         correction = Rotation.from_rotvec(np.pi * axis / np.linalg.norm(axis))
-
     else:
         axis = np.cross(vec_from, vec_to)
         angle = float(np.arccos(dot))
         correction = Rotation.from_rotvec(angle * axis / np.linalg.norm(axis))
 
-    # Apply correction to both attitude and velocity so the splice has zero angle-of-attack induced
+    # Apply correction to attitude AND velocity so the splice has zero angle of attack
     new_rotation = correction * sim_rotation
     new_quat_xyzw = new_rotation.as_quat()
     new_quat_wxyz = [new_quat_xyzw[3], new_quat_xyzw[0], new_quat_xyzw[1], new_quat_xyzw[2]]
+    rotated_velocity = correction.apply(initial_solution[4:7])
 
-    # Rotate the nominal velocity direction to align with the corrected attitude (zero AoA)
-    rotated_velocity = correction.apply(state[4:7])
-
-    # Optionally scale the velocity magnitude to match CATS measured speed at t_match.
-    # Average over a ±0.5 s window to reduce the effect of sensor noise at any single sample.
+    # Scale velocity magnitude to CATS speed at t_match (averaged over ±0.25 s to dampen sensor noise)
     if match_velocity and data is not None and "cats_vega" in data and hasattr(data["cats_vega"], "speed"):
-        window = 0.5
+        window = 0.25
         t_samples = np.linspace(t_match - window, t_match + window, 21)
         cats_speed = float(np.mean([data["cats_vega"].speed(t) for t in t_samples]))
         nominal_speed = float(np.linalg.norm(rotated_velocity))
@@ -508,33 +594,27 @@ def create_matched_flight(nominal_flight: Flight, params: SimParams, t_match, da
     new_velocity = rotated_velocity
 
     new_state = [
-        state[0],
-        state[1], state[2], state[3],
+        initial_solution[0],
+        initial_solution[1], initial_solution[2], initial_solution[3],
         float(new_velocity[0]), float(new_velocity[1]), float(new_velocity[2]),
         *new_quat_wxyz,
-        state[11], state[12], state[13],
+        initial_solution[11], initial_solution[12], initial_solution[13],
     ]
 
-    # Apply matched-flight overrides to a deep-copied rocket so the nominal rocket stays untouched.
+    # Deep-copy the rocket only if overrides will mutate it; otherwise share nominal's
     matched_rocket = nominal_flight.rocket
     if motor_overrides or parachute_overrides:
         matched_rocket = copy.deepcopy(nominal_flight.rocket)
 
-    # Rebuild the motor when the matched-flight config changes thrust, mass, burn time, or motor geometry.
     if motor_overrides:
-        rebuilt_motor = rebuild_motor_from_overrides(
-            matched_rocket.motor,
-            motor_overrides,
-            params=params,
-        )
-        # Replace with EmptyMotor before adding the rebuilt one so RocketPy's
-        # "only one motor" guard doesn't trigger. motor_position is saved first
-        # because it is stored directly on the rocket (not derived from the motor).
+        rebuilt_motor = rebuild_motor_from_overrides(matched_rocket.motor, motor_overrides, params=params)
+        # Swap via EmptyMotor to satisfy RocketPy's "only one motor" guard; save motor_position first
+        # because it lives on the rocket, not the motor.
         motor_position = matched_rocket.motor_position
         matched_rocket.motor = EmptyMotor()
         matched_rocket.add_motor(rebuilt_motor, position=motor_position)
 
-    # Each matching parachute is rebuilt with merged params; parachutes with enabled=False are dropped.
+    # Rebuild named parachutes with merged params; enabled=False drops them
     if parachute_overrides:
         rebuilt_parachutes = []
         matched_parachute_names = set()
@@ -543,7 +623,6 @@ def create_matched_flight(nominal_flight: Flight, params: SimParams, t_match, da
                 matched_parachute_names.add(parachute.name)
                 rebuilt = rebuild_parachute_from_overrides(parachute, parachute_overrides[parachute.name])
                 if rebuilt is None:
-                    # drop parachute
                     continue
                 rebuilt_parachutes.append(rebuilt)
             else:
@@ -571,104 +650,18 @@ def create_matched_flight(nominal_flight: Flight, params: SimParams, t_match, da
     tag_variation(matched_flight, getattr(nominal_flight, "_meta", {}))
     matched_flight.splice_time = t_match
 
-    # Pre-warm matched's internals so the shallow-copied splice inherits valid caches.
-    # `__evaluate_post_process` is a @cached_property that re-runs the simulation; if we let it
-    # compute lazily on the spliced flight (where solution and t_initial have been overwritten),
-    # it produces an empty array and ax/ay/az/acceleration break with an IndexError.
     _warm_matched_flight_cache(matched_flight)
 
-    # Build the spliced flight for downstream per-flight plots/KML/trajectory_3d (these need nominal-until-t_match + matched-after).
-    # The original matched_flight stays untouched and is attached as `_raw_matched` so the comparison plots can still
-    # access the pure post-splice matched simulation.
     spliced_flight = copy.copy(matched_flight)
     splice_matched_flight_in_place(spliced_flight, nominal_flight, t_match)
-    spliced_flight._raw_matched = matched_flight
 
     return spliced_flight
-
-
-def _warm_matched_flight_cache(flight: Flight):
-    """Touch the key derived attributes so RocketPy populates its lazy caches (post-process array + ax/ay/az/etc.) before we shallow-copy."""
-    # Accessing .acceleration cascades through ax/ay/az which compute __evaluate_post_process
-    for attr in ("acceleration", "alpha1", "alpha2", "alpha3", "R1", "R2", "R3", "M1", "M2", "M3", "net_thrust"):
-        try:
-            getattr(flight, attr)
-        except Exception:
-            pass
-
-
-
-def splice_matched_flight_in_place(spliced_flight: Flight, nominal_flight: Flight, splice_time):
-    """
-    Mutate a (copy of a) matched Flight so its time-domain Function attributes, `solution`, and `time` array
-    cover the spliced trajectory: nominal samples for t <= splice_time + matched samples for t >= splice_time.
-    Also copies boundary scalars (t_initial, out_of_rail_*) from nominal so plots/exports see a coherent launch.
-    """
-    # Splice the solution array (the primary state RocketPy plots like trajectory_3d read from)
-    nominal_solution = np.asarray(nominal_flight.solution)
-    matched_solution = np.asarray(spliced_flight.solution)
-    nominal_part = nominal_solution[nominal_solution[:, 0] <= splice_time]
-    matched_part = matched_solution[matched_solution[:, 0] >= splice_time]
-    combined_solution = np.vstack([nominal_part, matched_part])
-    # Preserve whichever storage form RocketPy expects (list of state vectors vs ndarray)
-    spliced_flight.solution = combined_solution.tolist() if isinstance(spliced_flight.solution, list) else combined_solution
-
-    # Splice the time array (used by KML export and CustomPlots.get_time_samples)
-    nominal_time = np.asarray(nominal_flight.time)
-    matched_time = np.asarray(spliced_flight.time)
-    spliced_flight.time = np.concatenate([nominal_time[nominal_time <= splice_time], matched_time[matched_time >= splice_time]])
-
-    # Override boundary scalars; matched started mid-air, so its rail-exit/initial-time values are bogus
-    spliced_flight.t_initial = nominal_flight.t_initial
-    for attr in ("out_of_rail_time", "out_of_rail_velocity"):
-        if hasattr(nominal_flight, attr):
-            try:
-                setattr(spliced_flight, attr, getattr(nominal_flight, attr))
-            except Exception:
-                pass
-
-    # Splice every cached time-domain funcify_method Function attribute (Function objects RocketPy lazily builds from .solution).
-    # Suppress RocketPy's "no rail phase" UserWarning that fires when matched (mid-air start) computes rail-button forces;
-    # the splice still produces correct values (nominal during on-rail phase + zeros after rail exit).
-    flight_cls = type(spliced_flight)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=UserWarning)
-        for attr_name in dir(flight_cls):
-            if attr_name.startswith("_"):
-                continue
-            try:
-                cls_attr = inspect.getattr_static(flight_cls, attr_name)
-            except AttributeError:
-                continue
-            if cls_attr.__class__.__name__ != "funcify_method_decorator":
-                continue
-            try:
-                nominal_func = getattr(nominal_flight, attr_name)
-                matched_func = getattr(spliced_flight, attr_name)
-            except Exception:
-                continue
-            if not (isinstance(nominal_func, Function) and isinstance(matched_func, Function)):
-                continue
-            # Skip non-time-domain Functions (e.g. *_frequency_response which are frequency-domain)
-            function_inputs = getattr(nominal_func, "__inputs__", []) or []
-            if not function_inputs or "time" not in str(function_inputs[0]).lower():
-                continue
-            try:
-                # Combine two Functions into one trace: nominal samples up to splice_time, matched samples from splice_time onwards.
-                nominal_source = nominal_func.source
-                matched_source = matched_func.source
-                nominal_part = nominal_source[nominal_source[:, 0] <= splice_time]
-                matched_part = matched_source[matched_source[:, 0] >= splice_time]
-                spliced_flight.__dict__[attr_name] = Function(np.vstack([nominal_part, matched_part]))
-            except Exception:
-                pass
 
 
 def latlon_to_local_xy(lat, lon, ref_lat, ref_lon):
     """Convert (lat, lon) to local Cartesian (x_east, y_north) meters around (ref_lat, ref_lon)."""
     x_east, y_north, _ = pm.geodetic2enu(lat, lon, 0.0, ref_lat, ref_lon, 0.0)
     return float(x_east), float(y_north)
-
 
 
 def compute_flight_computer_impacts(data, env):
@@ -744,23 +737,27 @@ def compute_gnss_3d_traces(data, env):
     return traces
 
 
-def find_rail_exit_time(flight_computer, effective_1rl):
-    """Find the timestamp when the rocket first cleared the rail in a flight-computer altitude trace, or None if never reached."""
-    # FlightDataImporter.altitude.source is an Nx2 array of [time, altitude]
-    altitude_data = flight_computer.altitude.source
-    times = altitude_data[:, 0]
-    altitudes = altitude_data[:, 1]
+def find_rail_exit_time(times, positions, effective_rail_length, baseline_position=None):
+    """First time the rocket has displaced `effective_rail_length` from its starting position, or None if never reached.
 
-    # Use the altitude at t=0 (liftoff in the computer's clock) as the baseline
-    baseline_altitude = float(flight_computer.altitude(0.0))
-    target_altitude = baseline_altitude + effective_1rl
-    # print(f"target_altitude={target_altitude}, baseline_altitude={baseline_altitude}")
-
-    above_target = altitudes >= target_altitude
+    `positions` may be 1D (altitude trace, displacement = |altitude - baseline|)
+    or 2D Nx3 (full position trace, displacement = 3D Euclidean norm).
+    `baseline_position` defaults to the first sample; pass an explicit value when the
+    first sample is pre-launch (e.g. flight-computer data with the rocket still on the pad).
+    """
+    times = np.asarray(times)
+    positions = np.asarray(positions)
+    if baseline_position is None:
+        baseline_position = positions[0]
+    # Distance traveled from the starting position: |Δaltitude| for 1D, 3D Euclidean displacement for Nx3
+    if positions.ndim == 1:
+        displacements = np.abs(positions - baseline_position)
+    else:
+        displacements = np.linalg.norm(positions - baseline_position, axis=1)
+    # First sample at or above the threshold (np.argmax returns the first True index)
+    above_target = displacements >= effective_rail_length
     if not above_target.any():
         return None
-
-    # Pick the first sample at or above the target altitude (nearest one)
     return float(times[int(np.argmax(above_target))])
 
 
@@ -852,9 +849,8 @@ def compare_gnss(flight, data, matched_flight=None):
     Function.compare_plots(lon_traces, title="Longitude Comparison", xlabel="Time (s)", ylabel="Longitude (deg)")
 
 
-
-def plot_vertical_motion_per_source(flight: Flight, data, motor: Motor, rocket, rocket_config, cats_markers=None, matched_flight=None, save_dir=None):
-    """Plot altitude / vertical velocity / vertical acceleration for the nominal/matched simulation and all compatible flight computers in one grouped plot."""
+def plot_motion_per_source(flight: Flight, data, motor: Motor, rocket, rocket_config, cats_markers=None, matched_flight=None, save_dir=None):
+    """Plot altitude / vertical+horizontal velocity / vertical acceleration for the nominal/matched simulation and all compatible flight computers in one grouped plot."""
     # SRAD/RCU has no speed or altitude trace we can plot here
     sources_in_order = []
     if "cats_vega" in data:
@@ -902,7 +898,13 @@ def plot_vertical_motion_per_source(flight: Flight, data, motor: Motor, rocket, 
         if source_key == "cats_vega" and cats_markers:
             markers.extend(cats_markers)
             print("Event markers from CATS Vega. 'Out Of Rail' derived.")
-        rail_exit_time = find_rail_exit_time(forecast, flight.effective_1rl)
+        # Flight-computer altitude.source is Nx2 [time, altitude]; baseline at t=0 (liftoff in the computer's clock)
+        # because the first sample is typically pre-launch with the rocket still on the pad.
+        altitude_source = forecast.altitude.source
+        rail_exit_time = find_rail_exit_time(
+            altitude_source[:, 0], altitude_source[:, 1], flight.effective_1rl,
+            baseline_position=float(forecast.altitude(0.0)),
+        )
         if rail_exit_time is not None:
             markers.append((rail_exit_time, "Out Of Rail", "red"))
 
@@ -931,7 +933,7 @@ def plot_vertical_motion_per_source(flight: Flight, data, motor: Motor, rocket, 
     for i, rocketpy_flight in enumerate(rocketpy_flights):
         time_samples = custom_plots.get_time_samples_for_flight(rocketpy_flight, 0, max_time_end)
         event_markers_per_source[i] = custom_plots.get_standard_event_markers_for_flight(
-            rocketpy_flight, motor, time_samples
+            rocketpy_flight, time_samples
         )
 
     custom_plots.plot_motion_over_time(
@@ -948,7 +950,11 @@ def compare_rail_exit_velocity(flight: Flight, data):
         if source_key not in data:
             continue
 
-        crossing_time = find_rail_exit_time(data[source_key], flight.effective_1rl)
+        altitude_source = data[source_key].altitude.source
+        crossing_time = find_rail_exit_time(
+            altitude_source[:, 0], altitude_source[:, 1], flight.effective_1rl,
+            baseline_position=float(data[source_key].altitude(0.0)),
+        )
         if crossing_time is None:
             print(f"  {label}: rail exit altitude never reached, skipping.")
             continue
@@ -956,9 +962,9 @@ def compare_rail_exit_velocity(flight: Flight, data):
         actual_velocity = float(data[source_key].speed(crossing_time))
 
         print(f"Actual rail exit velocity ({label}, at {crossing_time:.3f} s): {actual_velocity:.2f} m/s")
-        _print_simulated_error_line("rail exit velocity (nominal)", actual_velocity, flight.out_of_rail_velocity, "m/s")
+        _print_simulated_error_line(f"rail exit velocity (nominal, at {flight.out_of_rail_time:.3f} s)", actual_velocity, flight.out_of_rail_velocity, "m/s")
     print("\n")
-    
+
 
 def compare_speed(flight, data, matched_flight=None):
     """Compare peak speed and the speed trace against whichever speed-reporting sources are loaded."""
@@ -1069,7 +1075,7 @@ def plot_cats_attitude_angle(params: SimParams, custom_plots: CustomPlots, event
         width=1100,
         height=500,
     )
-    
+
 
 def compare_pressure(flight, data, matched_flight=None):
     """Compare the minimum (apogee) pressure and the full pressure trace across whichever sources are loaded."""
@@ -1196,6 +1202,7 @@ def build_reanalysis_artifacts(params: SimParams):
     """
     reanalysis_envs = _get_reanalysis_env_names(params)
     if reanalysis_envs is None:
+        # reanalysis not activated
         return
 
     matched_flight_config = params.config.reanalysis.matched_flight if params.config.reanalysis else None
@@ -1209,23 +1216,24 @@ def build_reanalysis_artifacts(params: SimParams):
     flight_computer_data_by_env = {}
     gnss_3d_traces = {}
 
+    # Load once; store so the comparison stage can reuse the same imported data.
+    data = load_flight_computer_data(params, params.config.reanalysis.sources)
+    
     for env_name in reanalysis_envs:
         scenario_sets = params.runtime.flights_by_env[env_name]
         nominal_flight = scenario_sets[0]["nominal"]
 
-        # Load once; store so the comparison stage can reuse the same imported data.
-        data = load_flight_computer_data(params, params.config.reanalysis.sources)
         flight_computer_data_by_env[env_name] = data
         flight_computer_impacts.extend(compute_flight_computer_impacts(data, nominal_flight.env))
 
         if match_time is not None and "cats_vega" in params.config.reanalysis.sources:
             matched_params_str = ", ".join(sorted(match_parameters)) or "none"
-            print(f"[reanalysis] Creating matched flight at t={match_time:.3f} s (matching: {matched_params_str})...")
+            print(f"[reanalysis] Creating matched flight at t={match_time:.3f} s; matching: {matched_params_str}...")
             if motor_overrides:
                 print(f"[reanalysis] applying motor overrides: {motor_overrides}")
             if parachute_overrides:
                 print(f"[reanalysis] applying parachute overrides: {parachute_overrides}")
-            matched_flight = create_matched_flight(
+            combined_matched_flight = create_matched_flight(
                 nominal_flight,
                 params,
                 match_time,
@@ -1234,7 +1242,7 @@ def build_reanalysis_artifacts(params: SimParams):
                 motor_overrides=motor_overrides,
                 match_parameters=match_parameters,
             )
-            scenario_sets[0]["matched"] = matched_flight
+            scenario_sets[0]["matched"] = combined_matched_flight
         elif match_time is not None:
             print("[reanalysis] 'matched_flight' requested but 'cats_vega' not in sources, skipping matched flight.")
 
@@ -1268,21 +1276,23 @@ def run_reanalysis_comparison(params: SimParams):
     for env_name in reanalysis_envs:
         scenario_sets = params.runtime.flights_by_env[env_name]
         nominal_flight = scenario_sets[0]["nominal"]
-        # The scenario_set stores the spliced flight (for per-flight plots/KML); the comparison plots want the
-        # raw matched-only simulation so the divergence is visible as a separate trace starting at t_match.
-        spliced_flight = scenario_sets[0].get("matched")
-        matched_flight = getattr(spliced_flight, "_raw_matched", None) if spliced_flight else None
+        # All downstream consumers (per-flight plots, KML, comparison plots and prints) use the spliced flight.
+        combined_matched_flight = scenario_sets[0].get("matched")
 
         printmd(f"## Reanalysis comparison: {env_name}")
         data = flight_computer_data_by_env[env_name]
 
-        compare_altitude(nominal_flight, data, matched_flight=matched_flight)
-        compare_gnss(nominal_flight, data, matched_flight=matched_flight)
+        compare_altitude(nominal_flight, data, matched_flight=combined_matched_flight)
+        compare_gnss(nominal_flight, data, matched_flight=combined_matched_flight)
 
         if "cats_vega" in params.config.reanalysis.sources:
             # Rail-exit time is still needed for the attitude-plot marker below;
             # the CATS-derived initial heading itself is registered in build_reanalysis_artifacts.
-            cats_rail_exit_time = find_rail_exit_time(data["cats_vega"], nominal_flight.effective_1rl)
+            altitude_source = data["cats_vega"].altitude.source
+            cats_rail_exit_time = find_rail_exit_time(
+                altitude_source[:, 0], altitude_source[:, 1], nominal_flight.effective_1rl,
+                baseline_position=float(data["cats_vega"].altitude(0.0)),
+            )
 
             event_markers = cats_event_markers(params)
             custom_plots = CustomPlots(
@@ -1298,10 +1308,17 @@ def run_reanalysis_comparison(params: SimParams):
                 attitude_markers.append((cats_rail_exit_time, "Out Of Rail", "red"))
             plot_cats_attitude_angle(params, custom_plots, attitude_markers)
 
-        plot_vertical_motion_per_source(nominal_flight, data, motor, rocket, rocket_config, cats_markers=event_markers, matched_flight=matched_flight, save_dir=params.project_path / "plots")
+        plot_motion_per_source(
+            nominal_flight,
+            data,
+            motor,
+            rocket,
+            rocket_config,
+            cats_markers=event_markers,
+            matched_flight=combined_matched_flight,
+            save_dir=params.project_path / "plots",
+        )
         compare_rail_exit_velocity(nominal_flight, data)
-        compare_acceleration(nominal_flight, data, motor, matched_flight=matched_flight)
-        compare_speed(nominal_flight, data, matched_flight=matched_flight)
-        compare_pressure(nominal_flight, data, matched_flight=matched_flight)
-
-
+        compare_acceleration(nominal_flight, data, motor, matched_flight=combined_matched_flight)
+        compare_speed(nominal_flight, data, matched_flight=combined_matched_flight)
+        compare_pressure(nominal_flight, data, matched_flight=combined_matched_flight)
