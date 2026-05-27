@@ -417,6 +417,7 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
         height=700,
     )
 
+    figure.write_html(str(params.project_path / "plots" / "compare_trajectories.html"))
     figure.show(renderer="notebook")
 
 
