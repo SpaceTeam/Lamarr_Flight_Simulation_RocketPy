@@ -1,18 +1,7 @@
 {
   "project": "CANSAT",
-  "_comment": "Keys starting with _ are ignored by the config loader.",
-
+  "output_level": 2,
   "environment": {
-    "_comment": [
-      "date may be generic \"tomorrow_08_local\" for tomorrow 8 AM or an explicit local-time list like [2026, 6, 13, 12, 0, 0].",
-      "[°] latitude: Launch latitude 47° 12' 50.94\"",
-      "[°] longitude: Launch longitude 9° 0' 18.86\"",
-      "[m AGL] max_expected_height",
-      "[m ASL] elevation",
-      "timezone is the local launch-site timezone.",
-      "envType: use 'standard_atmosphere', 'Windy', 'custom_atmosphere', 'reanalysis' OR 'reanalysis_custom';",
-      "         do NOT use 'reanalysis' or 'reanalysis_custom' in combination with the others."
-    ],
     "date": [2026, 3, 8, 12, 0, 0],
     "latitude": 48.3990720,
     "longitude": 13.4526260,
@@ -28,19 +17,11 @@
   },
 
   "engine": {
-    "_comment": "Choose from: solid or liquid",
     "type": "solid"
   },
 
   "motor": {
-    "_comment": [
-      "K700W values are from https://www.thrustcurve.org/motors/AeroTech/K700W/.",
-      "[g] total_mass, propellant_mass",
-      "[mm] diameter, length",
-      "[s] burn_time",
-      "center_of_dry_mass_factor: is multiplied by motor length to estimate the dry CG position from the nozzle.",
-      "thrust: Thrust-curve file in the project folder. Can be .eng/.rsa file for commercial motor or .csv file from static fire test."
-    ],
+    "_comment": "K700W values are from https://www.thrustcurve.org/motors/AeroTech/K700W/.",
     "name": "K700W",
     "total_mass": 2035,
     "propellant_mass": 1291,
@@ -56,8 +37,7 @@
       "[g] total_mass_without_motor (weighed)",
       "[mm] length and diameter (measured)",
       "[mm] total_CG_without_motor_from_tip (measured; FROM TIP!)",
-      "[kg*m^2] moment_of_intertia_Z and moment_of_intertia_XY (calculated)",
-      "Drag files are expected in the project folder."
+      "[kg*m^2] moment_of_intertia_Z and moment_of_intertia_XY (calculated)"
     ],
     "total_mass_without_motor": 16000,
     "length": 2090,
@@ -70,10 +50,7 @@
   },
 
   "nosecone": {
-    "_comment": [
-      "[mm] length is in mm (measured)",
-      "[mm] cylindrical_section_length"
-    ],
+    "_comment": "[mm] length is in mm (measured)",
     "length": 230,
     "cylindrical_section_length": 0,
     "kind": "elliptical"
@@ -98,8 +75,7 @@
   "fins": {
     "_comment": [
       "[mm] position (Onshape); distance of fins coming out of rocket to rear end rocket",
-      "[m] shape_points (measured): [0,0] root leading edge",
-      "No need to repeat [0, 0] at the end. RocketPy connects the polygon automatically."
+      "[m] shape_points (measured): [0,0] root leading edge"
     ],
     "amount": 3,
     "position": 465,
@@ -109,13 +85,6 @@
 
   "parachutes": {
     "main": {
-      "_comment": [
-        "if cd_s is provided cd and radius are optional",
-        "[m AGL] trigger",
-        "[Hz] sampling_rate",
-        "[s] lag (measured) - optional",
-        "[Pa] noise; [mean, standard deviation, time-correlation] - optional"
-      ],
       "cd_s": 6.911503837897546,
       "trigger": 150,
       "sampling_rate": 105
@@ -136,15 +105,6 @@
   },
 
   "flight": {
-    "_comment": [
-      "[m] rail_length",
-      "[°] inclination is in degrees; 0 = horizontal, 90 = vertical.",
-      "[°] heading is in degrees; 0 = north, 90 = east.",
-      "heading/inclination can be:",
-      " - be a single float number", 
-      " - a range string (e.g. 86..90:2 meaning: from 86 to 90 in 2-steps yielding 86, 88, 90",
-      " - a list of specific values, e.g. [86, 87, 90]"
-    ],
     "rail_length": 6,
     "inclination": "84..88:2",
     "_heading": "0..350:10",
@@ -152,10 +112,7 @@
   },
 
   "payload": {
-    "_comment": [
-      "[g] mass_total (300g * 6) and mass",
-      "[mm] diameter and length"
-    ],
+    "_comment": "[g] mass_total (300g * 6) and mass",
     "mass_total": 1800,
     "mass": "300..350:10",
     "diameter": 66,

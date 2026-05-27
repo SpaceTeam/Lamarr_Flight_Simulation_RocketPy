@@ -1,6 +1,8 @@
+import re
 import numpy as np
 from colorama import Fore, Style                                  # https://github.com/tartley/colorama
 import math
+from pathlib import Path
 from scipy.spatial.transform import Rotation
 from rocketpy import SolidMotor, LiquidMotor, HybridMotor, Rocket, Flight, Parachute, Environment
 import plotly.graph_objects as go
@@ -131,37 +133,45 @@ class CustomPlots:
     
     Attributes
     ----------
-    CustomPlots.flight_forecasts : Flight
-        Flight forecast to plot.
-    CustomPlots.motor : SolidMotor | LiquidMotor | HybridMotor
-        Used motor for this flight forecast.
-    CustomPlots.plot_title: str
-        Used configuration for this flight forecast.
-    CustomPlots.rocket : Rocket
-        Used rocket for this flight forecast.
-    CustomPlots.rocket_config : dict
-        Used rocket config dict for this flight forecast.
+    CustomPlots.flight_forecasts : list[Flight]
+        Flight forecasts to plot.
+    CustomPlots.motors : list[SolidMotor | LiquidMotor | HybridMotor]
+        Used motors for the flight forecasts.
+    CustomPlots.plot_titles: list[str]
+        Used labels for the flight forecasts.
+    CustomPlots.rockets : list[Rocket]
+        Used rockets for the flight forecasts.
+    CustomPlots.rocket_configs : list[dict]
+        Used rocket config dicts for the flight forecasts.
     """
     def __init__(
         self,
-        flight_forecast: Flight,
-        motor: SolidMotor | LiquidMotor | HybridMotor,
-        plot_title: str,
-        rocket: Rocket,
-        rocket_config: dict,
+        flight_forecast: list[Flight],
+        motor: list[SolidMotor | LiquidMotor | HybridMotor],
+        plot_title: list[str],
+        rocket: list[Rocket],
+        rocket_config: list[dict],
+        save_dir: Path | None = None,
     ):
-        self.flight_forecast = flight_forecast
-        self.motor = motor
-        self.plot_title = plot_title
-        self.rocket = rocket
-        self.rocket_config = rocket_config
+        list_lengths = [len(flight_forecast), len(motor), len(plot_title), len(rocket), len(rocket_config)]
+
+        if any(list_length != list_lengths[0] for list_length in list_lengths):
+            raise ValueError("CustomPlots input lists must all have the same length.")
+
+        self.flight_forecasts = flight_forecast
+        self.motors = motor
+        self.plot_titles = plot_title
+        self.rockets = rocket
+        self.rocket_configs = rocket_config
+        # When set, every create_grouped_plotly_plot call saves an HTML file here.
+        self.save_dir = save_dir
 
 
-    def get_time_samples(self, time_start: float, time_end: float) -> np.ndarray:
+    def get_time_samples_for_flight(self, flight: Flight, time_start: float, time_end: float) -> np.ndarray:
         """
-        Get time samples between the given start and end time.
+        Get time samples for the selected flight between the given start and end time.
         """
-        time_samples = np.asarray(self.flight_forecast.time, dtype=float)
+        time_samples = np.asarray(flight.time, dtype=float)
         time_mask = (time_start <= time_samples) & (time_samples <= time_end)
         time_samples = time_samples[time_mask]
         return time_samples
@@ -196,59 +206,6 @@ class CustomPlots:
         return start_time, end_time
     
 
-    def add_one_vertical_event_line(
-        self,
-        figure: go.Figure,
-        event_time: float | None,
-        label: str,
-        color: str,
-        annotation_side: str = "right",
-    ):
-        """
-        Add a vertical event line with a label to a Plotly figure.
-        The annotation can be placed either on the left or on the right side of the line.
-        """
-        if event_time is None:
-            return
-
-        figure.add_shape(
-            type="line",
-            x0=event_time,
-            x1=event_time,
-            y0=0,
-            y1=1,
-            xref="x",
-            yref="paper",
-            line={
-                "color": color,
-                "width": 1.5,
-                "dash": "dash",
-            },
-        )
-
-        if annotation_side == "left":
-            xshift = -5
-            xanchor = "right"
-        else:
-            xshift = 4
-            xanchor = "left"
-
-        figure.add_annotation(
-            x=event_time,
-            y=0.5,
-            xref="x",
-            yref="paper",
-            text=label,
-            showarrow=False,
-            textangle=-90,
-            font={"color": color},
-            xanchor=xanchor,
-            yanchor="middle",
-            align="center",
-            xshift=xshift,
-        )
-
-
     def add_event_marker_lines(
         self,
         figure: go.Figure,
@@ -257,6 +214,23 @@ class CustomPlots:
     ):
         """
         Filter, sort, and draw vertical event marker lines on a Plotly figure.
+        """
+        shapes, annotations = self.get_event_marker_layout_parts(time_samples, event_markers)
+        existing_shapes = list(figure.layout.shapes) if figure.layout.shapes else []
+        existing_annotations = list(figure.layout.annotations) if figure.layout.annotations else []
+        figure.update_layout(
+            shapes=existing_shapes + shapes,
+            annotations=existing_annotations + annotations,
+        )
+
+
+    def get_event_marker_layout_parts(
+        self,
+        time_samples: np.ndarray,
+        event_markers: list[tuple[float, str, str]],
+    ) -> tuple[list[dict], list[dict]]:
+        """
+        Build Plotly shapes and annotations for event markers in the plotted time range.
         """
         # Keep only markers that have a time and fall inside the plotted time range.
         plot_start_time = float(time_samples[0])
@@ -271,8 +245,10 @@ class CustomPlots:
         event_markers.sort(key=lambda event_marker: event_marker[0])
 
         previous_event_time = None
-        close_event_threshold = 1.5
+        close_event_threshold = 2.5  # seconds
         close_event_side = "left"
+        shapes = []
+        annotations = []
 
         for event_time, label, color in event_markers:
             annotation_side = "right"
@@ -287,45 +263,82 @@ class CustomPlots:
                 else:
                     close_event_side = "left"
 
-            self.add_one_vertical_event_line(
-                figure=figure,
-                event_time=event_time,
-                label=label,
-                color=color,
-                annotation_side=annotation_side,
+            if annotation_side == "left":
+                xshift = -5
+                xanchor = "right"
+            else:
+                xshift = 4
+                xanchor = "left"
+
+            shapes.append(
+                {
+                    "type": "line",
+                    "x0": event_time,
+                    "x1": event_time,
+                    "y0": 0,
+                    "y1": 1,
+                    "xref": "x",
+                    "yref": "paper",
+                    "line": {
+                        "color": color,
+                        "width": 1.5,
+                        "dash": "dash",
+                    },
+                }
+            )
+            annotations.append(
+                {
+                    "x": event_time,
+                    "y": 0.5,
+                    "xref": "x",
+                    "yref": "paper",
+                    "text": label,
+                    "showarrow": False,
+                    "textangle": -90,
+                    "font": {"color": color},
+                    "xanchor": xanchor,
+                    "yanchor": "middle",
+                    "align": "center",
+                    "xshift": xshift,
+                }
             )
 
             previous_event_time = event_time
 
+        return shapes, annotations
 
-    def add_vertical_event_markers(self, time_samples: np.ndarray, figure: go.Figure):
+
+    def get_standard_event_markers_for_flight(
+        self,
+        flight: Flight,
+        motor: SolidMotor | LiquidMotor | HybridMotor,
+        time_samples: np.ndarray,
+    ) -> list[tuple[float, str, str]]:
         """
-        Add standard flight event markers to a Plotly figure.
+        Build the standard event marker list for one flight and its motor.
         """
-        if hasattr(self.flight_forecast, "out_of_rail_time"):
-            out_of_rail_time = float(self.flight_forecast.out_of_rail_time)
+        if hasattr(flight, "out_of_rail_time"):
+            out_of_rail_time = float(flight.out_of_rail_time)
         else:
             out_of_rail_time = None
-            
-        burn_out_time = float(self.motor.burn_out_time)
-        
-        if hasattr(self.flight_forecast, "apogee_time"):
-            apogee_time = float(self.flight_forecast.apogee_time)
+
+        burn_out_time = float(motor.burn_out_time)
+
+        if hasattr(flight, "apogee_time"):
+            apogee_time = float(flight.apogee_time)
         else:
             apogee_time = None
-        
-        if hasattr(self.flight_forecast, "t_final"):
-            ground_hit_time = float(self.flight_forecast.t_final)
-        else: 
+
+        if hasattr(flight, "t_final"):
+            ground_hit_time = float(flight.t_final)
+        else:
             ground_hit_time = None
-        
-        if hasattr(self.flight_forecast, "mach_number"):
-            mach_number = np.array([self.flight_forecast.mach_number(time) for time in time_samples], dtype=float)
+
+        if hasattr(flight, "mach_number"):
+            mach_number = np.array([flight.mach_number(time) for time in time_samples], dtype=float)
         else:
             mach_number = None
-        
 
-        # --- Transonic and supersonic intervals ---
         transonic_start_time, transonic_end_time = self.find_threshold_interval(
             mach_number,
             time_samples,
@@ -348,59 +361,69 @@ class CustomPlots:
             (supersonic_end_time, "Supersonic Exit", "blue"),
         ]
 
-        if hasattr(self.flight_forecast, "parachute_events"):
-            for ejection_time, parachute in self.flight_forecast.parachute_events:
+        if hasattr(flight, "parachute_events"):
+            for ejection_time, parachute in flight.parachute_events:
                 inflation_time = ejection_time + parachute.lag
-                event_markers.append((float(ejection_time),f"{parachute.name} parachute ejected; cd_s {parachute.cd_s:.2f} m²", "black"))
-                event_markers.append((float(inflation_time),f"{parachute.name} parachute inflated", "black"))
-                
-        self.add_event_marker_lines(figure, time_samples, event_markers)
+                event_markers.append((float(ejection_time), f"{parachute.name} parachute ejected", "black"))
+                event_markers.append((float(inflation_time), f"{parachute.name} parachute inflated", "black"))
+
+        return event_markers
 
 
-    def create_plotly_plot(
+    def create_grouped_plotly_plot(
         self,
         title: str,
-        time_samples: np.ndarray,
-        time_start: float,
-        time_end: float,
-        traces: list[dict],
+        flight_groups: list[dict],
         yaxis_title: str,
         yaxis2_title: str | None = None,
         yaxis_dtick: float | int | None = None,
         yaxis2_dtick: float | int | None = None,
-        width: int = 800,
+        width: int = 1100,
         height: int = 500,
-        event_markers=None,
+        legend_x_pos: float = 1.12,
+        buttons_x_pos=1.1,
     ):
         """
-        Create and display a Plotly plot with a shared x-axis, optional second y-axis,
-        unified hover display, and standard event markers.
-
-        Each trace is passed as a dictionary containing the plotted data and formatting.
+        Create a Plotly plot where buttons switch between one flight group at a time.
         """
-
         figure = go.Figure()
+        visibility = []
+        marker_shapes = []
+        marker_annotations = []
 
-        for trace in traces:
-            scatter_options = {
-                "x": time_samples,
-                "y": trace["y"],
-                "mode": "lines",
-                "name": trace["name"],
-                "hovertemplate": trace["hovertemplate"],
-                "line": trace["line"],
-            }
+        is_single_group = len(flight_groups) == 1
 
-            # optional right y axis
-            if trace.get("yaxis") == "y2":
-                scatter_options["yaxis"] = "y2"
+        for group_index, flight_group in enumerate(flight_groups):
+            shapes, annotations = self.get_event_marker_layout_parts(
+                time_samples=flight_group["time_samples"],
+                event_markers=flight_group["event_markers"],
+            )
+            marker_shapes.append(shapes)
+            marker_annotations.append(annotations)
 
-            figure.add_trace(go.Scatter(**scatter_options))
+            # In single-group plots, drop the label prefix so trace names stay clean (e.g. "Altitude [m]"
+            # instead of "CATS Vega - Altitude [m]"). In multi-group plots the prefix disambiguates groups.
+            label_prefix = "" if is_single_group else f"{flight_group['label']} - "
+            hover_prefix = "" if is_single_group else f"{flight_group['label']}<br>Time: %{{x:.1f}} s, "
 
-        if event_markers is None:
-            self.add_vertical_event_markers(time_samples, figure)
-        else:
-            self.add_event_marker_lines(figure, time_samples, event_markers)
+            for trace in flight_group["traces"]:
+                scatter_options = {
+                    "x": flight_group["time_samples"],
+                    "y": trace["y"],
+                    "mode": "lines",
+                    "name": f"{label_prefix}{trace['name']}",
+                    "hovertemplate": f"{hover_prefix}{trace['hovertemplate']}",
+                    "line": trace["line"],
+                    "visible": True,
+                    "showlegend": True,
+                }
+
+                # optional right y axis
+                if trace.get("yaxis") == "y2":
+                    scatter_options["yaxis"] = "y2"
+
+                figure.add_trace(go.Scatter(**scatter_options))
+                visibility.append(True)
 
         yaxis_settings = {
             "title": yaxis_title,
@@ -409,6 +432,11 @@ class CustomPlots:
 
         if yaxis_dtick is not None:
             yaxis_settings["dtick"] = yaxis_dtick
+
+        all_marker_shapes = [shape for shapes in marker_shapes for shape in shapes]
+        all_marker_annotations = [annotation for annotations in marker_annotations for annotation in annotations]
+        all_time_start = min(flight_group["time_start"] for flight_group in flight_groups)
+        all_time_end = max(flight_group["time_end"] for flight_group in flight_groups)
 
         layout_settings = {
             "title": {
@@ -420,25 +448,27 @@ class CustomPlots:
             "height": height,
             "xaxis": {
                 "title": "Time [s]",
-                "range": [time_start, time_end + 1],
-                # "dtick": 4,
+                "range": [all_time_start, all_time_end + 1],
                 "showgrid": True,
                 "hoverformat": ".3f",
-                "unifiedhovertitle": {
-                    "text": "Time: %{x:.3f} s",
-                },
             },
             "yaxis": yaxis_settings,
-            "hovermode": "x unified",
             "legend": {
-                "orientation": "h",
-                "yanchor": "bottom",
-                "y": 1.02,
-                "xanchor": "center",
-                "x": 0.5,
+                "orientation": "v",
+                "yanchor": "top",
+                "y": 1,
+                "xanchor": "left",
+                "x": legend_x_pos,
             },
+            "shapes": all_marker_shapes,
+            "annotations": all_marker_annotations,
             "template": "plotly_white",
         }
+
+        # Single-group plots get a unified hover line (all traces share one crosshair tooltip).
+        if is_single_group:
+            layout_settings["hovermode"] = "x unified"
+            layout_settings["xaxis"]["unifiedhovertitle"] = {"text": "Time: %{x:.3f} s"}
 
         if yaxis2_title is not None:
             yaxis2_settings = {
@@ -453,10 +483,80 @@ class CustomPlots:
 
             layout_settings["yaxis2"] = yaxis2_settings
 
+        if len(flight_groups) > 1:
+            buttons = [
+                {
+                    "label": "All",
+                    "method": "update",
+                    "args": [
+                        {"visible": [True] * len(visibility), "showlegend": [True] * len(visibility)},
+                        {
+                            "shapes": all_marker_shapes,
+                            "annotations": all_marker_annotations,
+                            "xaxis.range": [all_time_start, all_time_end + 1],
+                        },
+                    ],
+                }
+            ]
+            trace_start = 0
+            trace_ranges = []
+
+            for flight_group in flight_groups:
+                trace_end = trace_start + len(flight_group["traces"])
+                trace_ranges.append((trace_start, trace_end))
+                trace_start = trace_end
+
+            for group_index, flight_group in enumerate(flight_groups):
+                group_visibility = [False] * len(visibility)
+                group_showlegend = [False] * len(visibility)
+                trace_start, trace_end = trace_ranges[group_index]
+
+                for trace_index in range(trace_start, trace_end):
+                    group_visibility[trace_index] = True
+                    group_showlegend[trace_index] = True
+
+                buttons.append(
+                    {
+                        "label": flight_group["label"],
+                        "method": "update",
+                        "args": [
+                            {"visible": group_visibility, "showlegend": group_showlegend},
+                            {
+                                "shapes": marker_shapes[group_index],
+                                "annotations": marker_annotations[group_index],
+                                "xaxis.range": [flight_group["time_start"], flight_group["time_end"] + 1],
+                            },
+                        ],
+                    }
+                )
+
+            layout_settings["updatemenus"] = [
+                {
+                    "buttons": buttons,
+                    "direction": "up",
+                    "showactive": True,
+                    "x": buttons_x_pos,
+                    "xanchor": "right",
+                    "y": -0.05,
+                    "yanchor": "top",
+                }
+            ]
+            layout_settings["margin"] = {"b": 80}
+
         figure.update_layout(**layout_settings)
 
+        if self.save_dir is not None:
+            # Build a unique filename from the first flight label + plot title, with filesystem-safe chars.
+            first_label = re.sub(r"[^\w\-]", "_", self.plot_titles[0])
+            plot_slug  = re.sub(r"[^\w\-]", "_", title)
+            if is_single_group:
+                filename = f"{plot_slug}.html"                
+            else:
+                filename = f"{first_label}_{plot_slug}.html"
+            figure.write_html(str(self.save_dir / filename))
+
         figure.show(renderer="notebook")
-            
+
 
     def plot_stability_and_cg_cp_position(self, use_openrocket_coordinates=True):
         """
@@ -476,77 +576,87 @@ class CustomPlots:
         -------
         None    
         """
-        time_start = 0.0
-        time_end = float(self.flight_forecast.apogee_time)
-        time_samples = self.get_time_samples(time_start=time_start, time_end=time_end)
-        
-        # --- Flight data ---
-        # CG(t): center of mass position along rocket axis (in rocket reference system)
-        cg_position = np.array([self.rocket.center_of_mass(time) for time in time_samples], dtype=float) * 1000     # m to mm
-        
-        # Mach(t) from the flight, then CP(Mach(t))
-        mach_number = np.array([self.flight_forecast.mach_number(time) for time in time_samples], dtype=float)
-        cp_position = np.array([self.rocket.cp_position(mach) for mach in mach_number], dtype=float) * 1000     # m to mm
-        
-        # stability(t)
-        stability_margin = np.array([self.flight_forecast.stability_margin(time) for time in time_samples], dtype=float)
-
-        # convert
-        if use_openrocket_coordinates:
-            rocket_length = self.rocket_config["total_length"]          # mm
-            cg_position = rocket_length - cg_position
-            cp_position = rocket_length - cp_position
-
-        # --- Plot ---
         if use_openrocket_coordinates:
             position_axis_title = "Position along rocket axis [mm] (0 = nose)"
             title_suffix = "OpenRocket CG/CP orientation"
         else:
             position_axis_title = "Position along rocket axis [mm] (0 = tail)"
             title_suffix = "RocketPy CG/CP orientation"
-            
-        traces = [
-            # left y axis
-            {
-                "y": mach_number,
-                "name": "Mach number",
-                "hovertemplate": "Mach: %{y:.2f}<extra></extra>",
-                "line": {"color": "darkturquoise"},
-            },
-            {
-                "y": stability_margin,
-                "name": "Stability margin [c]",
-                "hovertemplate": "Stability: %{y:.2f} c<extra></extra>",
-                "line": {"color": "royalblue", "dash": "dash"},
-            },
-            # right y axis
-            {
-                "y": cg_position,
-                "name": "CG position [mm]",
-                "hovertemplate": "CG: %{y:.1f} mm<extra></extra>",
-                "line": {"color": "gold"},
-                "yaxis": "y2",
-            },
-            {
-                "y": cp_position,
-                "name": "CP position [mm]",
-                "hovertemplate": "CP: %{y:.1f} mm<extra></extra>",
-                "line": {"color": "firebrick"},
-                "yaxis": "y2",
-            },
-        ]
 
-        self.create_plotly_plot(
-            title=f"[{self.plot_title}] CG/CP position, Mach, Stability ({title_suffix})",
-            time_samples=time_samples,
-            time_start=time_start,
-            time_end=time_end,
-            traces=traces,
+        flight_groups = []
+        for flight, motor, plot_title, rocket, rocket_config in zip(
+            self.flight_forecasts,
+            self.motors,
+            self.plot_titles,
+            self.rockets,
+            self.rocket_configs,
+        ):
+            time_start = 0.0
+            time_end = float(flight.apogee_time)
+            time_samples = self.get_time_samples_for_flight(flight, time_start, time_end)
+
+            # --- Flight data ---
+            # CG(t): center of mass position along rocket axis (in rocket reference system)
+            cg_position = np.array([rocket.center_of_mass(time) for time in time_samples], dtype=float) * 1000
+
+            # Mach(t) from the flight, then CP(Mach(t))
+            mach_number = np.array([flight.mach_number(time) for time in time_samples], dtype=float)
+            cp_position = np.array([rocket.cp_position(mach) for mach in mach_number], dtype=float) * 1000
+            stability_margin = np.array([flight.stability_margin(time) for time in time_samples], dtype=float)
+
+            if use_openrocket_coordinates:
+                rocket_length = rocket_config["total_length"]
+                cg_position = rocket_length - cg_position
+                cp_position = rocket_length - cp_position
+
+            traces = [
+                {
+                    "y": mach_number,
+                    "name": "Mach number",
+                    "hovertemplate": "Mach: %{y:.2f}<extra></extra>",
+                    "line": {"color": "darkturquoise"},
+                },
+                {
+                    "y": stability_margin,
+                    "name": "Stability margin [c]",
+                    "hovertemplate": "Stability: %{y:.2f} c<extra></extra>",
+                    "line": {"color": "royalblue", "dash": "dash"},
+                },
+                {
+                    "y": cg_position,
+                    "name": "CG position [mm]",
+                    "hovertemplate": "CG: %{y:.1f} mm<extra></extra>",
+                    "line": {"color": "gold"},
+                    "yaxis": "y2",
+                },
+                {
+                    "y": cp_position,
+                    "name": "CP position [mm]",
+                    "hovertemplate": "CP: %{y:.1f} mm<extra></extra>",
+                    "line": {"color": "firebrick"},
+                    "yaxis": "y2",
+                },
+            ]
+
+            flight_groups.append(
+                {
+                    "label": plot_title,
+                    "time_samples": time_samples,
+                    "time_start": time_start,
+                    "time_end": time_end,
+                    "traces": traces,
+                    "event_markers": self.get_standard_event_markers_for_flight(flight, motor, time_samples),
+                }
+            )
+
+        self.create_grouped_plotly_plot(
+            title=f"CG/CP position, Mach, Stability ({title_suffix})",
+            flight_groups=flight_groups,
             yaxis_title="Mach / Stability margin [c]",
             yaxis2_title=position_axis_title,
             yaxis_dtick=0.5,
             yaxis2_dtick=100,
-            width=900,
+            width=1100,
             height=550,
         )
 
@@ -558,55 +668,66 @@ class CustomPlots:
                 In OpenRocket the attitude angle is called "vertical orientation (zenith)".
             - heading(t): angle from north to velocity vector in xy plane (0=north, 90=east)
         """
-        time_start = 0.0
-        
-        inflation_times = []
-        for ejection_time, parachute in self.flight_forecast.parachute_events:
-            inflation_times.append(ejection_time + parachute.lag)
-        first_inflation_time = min(inflation_times) if inflation_times else None
-        
-        time_end = first_inflation_time if first_inflation_time is not None else float(self.flight_forecast.apogee_time)
-        time_samples = self.get_time_samples(time_start=time_start, time_end=time_end)
-        
-        angle_of_attack = np.array([self.flight_forecast.angle_of_attack(time) for time in time_samples], dtype=float)
-        attitude_angle = np.array([self.flight_forecast.attitude_angle(time) for time in time_samples], dtype=float)
+        flight_groups = []
+        for flight, motor, plot_title in zip(self.flight_forecasts, self.motors, self.plot_titles):
+            time_start = 0.0
 
-        # Heading (compass bearing of the velocity vector):
-        vx = np.array([self.flight_forecast.vx(time) for time in time_samples], dtype=float)
-        vy = np.array([self.flight_forecast.vy(time) for time in time_samples], dtype=float)
-        heading = np.degrees(np.arctan2(vx, vy)) % 360.0    # wrapped to [0, 360)
-        
-        traces = [
-            {
-                "y": angle_of_attack,
-                "name": "Angle of attack [°]",
-                "hovertemplate": "Angle of attack: %{y:.2f} °<extra></extra>",
-                "line": {"color": "royalblue"},
-            },
-            {
-                "y": attitude_angle,
-                "name": "Attitude angle [°]",
-                "hovertemplate": "Attitude angle: %{y:.2f} °<extra></extra>",
-                "line": {"color": "firebrick"},
-            },
-            {
-                "y": heading,
-                "name": "Heading [°]",
-                "hovertemplate": "Heading: %{y:.2f} °<extra></extra>",
-                "line": {"color": "darkgreen"},
-                "yaxis": "y2",
-            },
-        ]
+            inflation_times = []
+            if hasattr(flight, "parachute_events"):
+                for ejection_time, parachute in flight.parachute_events:
+                    inflation_times.append(ejection_time + parachute.lag)
+            first_inflation_time = min(inflation_times) if inflation_times else None
 
-        self.create_plotly_plot(
-            title=f"[{self.plot_title}] Angle of attack, attitude angle, and heading over time",
-            time_samples=time_samples,
-            time_start=time_start,
-            time_end=time_end,
-            traces=traces,
+            time_end = first_inflation_time if first_inflation_time is not None else float(flight.apogee_time)
+            time_samples = self.get_time_samples_for_flight(flight, time_start, time_end)
+
+            angle_of_attack = np.array([flight.angle_of_attack(time) for time in time_samples], dtype=float)
+            attitude_angle = np.array([flight.attitude_angle(time) for time in time_samples], dtype=float)
+
+            # Heading (compass bearing of the velocity vector):
+            vx = np.array([flight.vx(time) for time in time_samples], dtype=float)
+            vy = np.array([flight.vy(time) for time in time_samples], dtype=float)
+            heading = np.degrees(np.arctan2(vx, vy)) % 360.0    # wrapped to [0, 360)
+
+            traces = [
+                {
+                    "y": angle_of_attack,
+                    "name": "Angle of attack [°]",
+                    "hovertemplate": "Angle of attack: %{y:.2f} °<extra></extra>",
+                    "line": {"color": "royalblue"},
+                },
+                {
+                    "y": attitude_angle,
+                    "name": "Attitude angle [°]",
+                    "hovertemplate": "Attitude angle: %{y:.2f} °<extra></extra>",
+                    "line": {"color": "firebrick"},
+                },
+                {
+                    "y": heading,
+                    "name": "Heading [°]",
+                    "hovertemplate": "Heading: %{y:.2f} °<extra></extra>",
+                    "line": {"color": "darkgreen"},
+                    "yaxis": "y2",
+                },
+            ]
+
+            flight_groups.append(
+                {
+                    "label": plot_title,
+                    "time_samples": time_samples,
+                    "time_start": time_start,
+                    "time_end": time_end,
+                    "traces": traces,
+                    "event_markers": self.get_standard_event_markers_for_flight(flight, motor, time_samples),
+                }
+            )
+
+        self.create_grouped_plotly_plot(
+            title="Angle of attack, attitude angle, and heading over time",
+            flight_groups=flight_groups,
             yaxis_title="Angle [°]",
             yaxis2_title="Heading [°]",
-            width=900,
+            width=1100,
             height=500,
         )
 
@@ -622,7 +743,7 @@ class CustomPlots:
 
         https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/rocket-rotations/
 
-        transform_openrocket=True: OpenRocket flow-aligned reference frame (same as body frame when angle of attack α and 
+        transform_openrocket=True: OpenRocket flow-aligned reference frame (same as body frame when angle of attack α and
         sideslip β are zero).
             The body frame is rotated around the longitudinal z-axis by
                 theta = atan2(airspeed y component in body frame, airspeed x component in body frame)
@@ -636,179 +757,220 @@ class CustomPlots:
         See: https://www.researchgate.net/figure/Rocket-orientation-angles-in-Earth-frame-and-angle-of-attack-a-and-sideslip-angle-b_fig4_360423890
         with X_b = OpenRocket z, Y_b = OpenRocket y, Z_b = OpenRocket x.
         """
-        # TODO: check this! (the result matches OpenRocket, which is good, but I still want to double check the math and the axis mapping) 
-        time_start = 0.0
+        # TODO: check this! (the result matches OpenRocket, which is good, but I still want to double check the math and the axis mapping)
+        frame_label = "OpenRocket flow-aligned reference frame" if transform_openrocket else "RocketPy body reference frame"
+        flight_groups = []
 
-        inflation_times = []
-        for ejection_time, parachute in self.flight_forecast.parachute_events:
-            inflation_times.append(ejection_time + parachute.lag)
-        first_inflation_time = min(inflation_times) if inflation_times else None
-
-        time_end = first_inflation_time if first_inflation_time is not None else float(self.flight_forecast.apogee_time)
-        time_samples = self.get_time_samples(time_start=time_start, time_end=time_end)
-
-        if transform_openrocket:
-            # Transform body-frame angular velocity to the flow-aligned reference frame.
-            # pitch_rate = flow-aligned reference frame y-component = -sin(theta)*w1 + cos(theta)*w2
-            # yaw_rate   = flow-aligned reference frame x-component =  cos(theta)*w1 + sin(theta)*w2
-            # Matches OpenRocket AbstractSimulationStepper: pitchRate=rot.getY(), yawRate=rot.getX().
-
-            # Angular velocity (in body frame)
-            w1 = np.array([self.flight_forecast.w1(t) for t in time_samples])
-            w2 = np.array([self.flight_forecast.w2(t) for t in time_samples])
-
-            # Rocket orientation quaternions
-            quaternions = np.column_stack([
-                [self.flight_forecast.e1(t) for t in time_samples],
-                [self.flight_forecast.e2(t) for t in time_samples],
-                [self.flight_forecast.e3(t) for t in time_samples],
-                [self.flight_forecast.e0(t) for t in time_samples],
-            ])
-
-            # Airspeed in inertial frame: rocket velocity - wind (matches OpenRocket convention)
-            vx = np.array([self.flight_forecast.vx(t) for t in time_samples])
-            vy = np.array([self.flight_forecast.vy(t) for t in time_samples])
-            vz = np.array([self.flight_forecast.vz(t) for t in time_samples])
-            z_alts = np.array([self.flight_forecast.z(t) for t in time_samples])
-            wind_vx = np.array([self.flight_forecast.env.wind_velocity_x(z) for z in z_alts])
-            wind_vy = np.array([self.flight_forecast.env.wind_velocity_y(z) for z in z_alts])
-            airspeed_inertial = np.column_stack([vx - wind_vx, vy - wind_vy, vz])
-
-            # Rotate airspeed to body frame (inverse of rocket orientation)
-            airspeed_body = Rotation.from_quat(quaternions).inv().apply(airspeed_inertial)
-
-            # Theta = azimuthal angle of airspeed lateral component in body frame
-            len_xy = np.hypot(airspeed_body[:, 0], airspeed_body[:, 1])
-            valid = len_xy > 0.001
-            safe_len = np.where(valid, len_xy, 1.0)   # avoid division by zero
-            cos_theta = np.where(valid, airspeed_body[:, 0] / safe_len, 1.0)
-            sin_theta = np.where(valid, airspeed_body[:, 1] / safe_len, 0.0)
-
-            # invRotateZ by theta: rotate body frame around z by -theta
-            angular_rate_1 = np.degrees(-sin_theta * w1 + cos_theta * w2)   # pitch (flow-aligned reference frame y)
-            angular_rate_2 = np.degrees( cos_theta * w1 + sin_theta * w2)   # yaw   (flow-aligned reference frame x)
-            frame_label = "OpenRocket flow-aligned reference frame"
-        else:
-            angular_rate_1 = np.degrees(np.array([self.flight_forecast.w1(time) for time in time_samples], dtype=float))
-            angular_rate_2 = np.degrees(np.array([self.flight_forecast.w2(time) for time in time_samples], dtype=float))
-            frame_label = "RocketPy body reference frame"
-
-        angular_rate_3 = np.degrees(np.array([self.flight_forecast.w3(time) for time in time_samples], dtype=float))
-        
-        traces = [
-            {
-                "y": angular_rate_1,
-                "name": f"pitch rate [°/s]",
-                "hovertemplate": "pitch rate: %{y:.3f} °/s<extra></extra>",
-                "line": {"color": "royalblue"},
-            },
-            {
-                "y": angular_rate_2,
-                "name": f"yaw rate [°/s]",
-                "hovertemplate": "yaw rate: %{y:.3f} °/s<extra></extra>",
-                "line": {"color": "firebrick"},
-            },
-            {
-                "y": angular_rate_3,
-                "name": "roll rate [°/s]",
-                "hovertemplate": "roll rate: %{y:.3f} °/s<extra></extra>",
-                "line": {"color": "gold"},
-            },
-        ]
-
-        self.create_plotly_plot(
-            title=f"[{self.plot_title}] Angular velocity ({frame_label})",
-            time_samples=time_samples,
-            time_start=time_start,
-            time_end=time_end,
-            traces=traces,
-            yaxis_title="Angular rate [°/s]",
-            width=900,
-            height=500,
-        )
-        
-
-        
-    def plot_vertical_motion(self, time_interval=None, event_markers=None):
-        """
-        Plot altitude, vertical velocity, and vertical acceleration over time.
-        """
-        if time_interval:
-            time_start = time_interval[0]
-            time_end = time_interval[1]
-        else:
+        for flight, motor, plot_title in zip(self.flight_forecasts, self.motors, self.plot_titles):
             time_start = 0.0
-            time_end = float(self.flight_forecast.t_final)
-        time_samples = self.get_time_samples(time_start=0.0, time_end=time_end)
-        
-        # --- Flight data ---
-        # altitude(t)
-        altitude = np.array([self.flight_forecast.altitude(time) for time in time_samples], dtype=float)
-        
-        # vertical_velocity(t)
-        if hasattr(self.flight_forecast, "vz"):
-            motion = np.array([self.flight_forecast.vz(time) for time in time_samples], dtype=float)
-            name_motion = "Vertical velocity [m/s]"
-            name_motion_hover = "Vertical velocity: %{y:.1f} m/s<extra></extra>"
-            title_yaxis = "Altitude [m] / Vertical velocity [m/s]"
-        else:
-            motion = np.array([self.flight_forecast.speed(time) for time in time_samples], dtype=float)
-            name_motion = "Speed [m/s]"
-            name_motion_hover = "Speed: %{y:.1f} m/s<extra></extra>"
-            title_yaxis = "Altitude [m] / Speed [m/s]"
-            
-        # vertical_acceleration(t)
-        if hasattr(self.flight_forecast, "az"):
-            acceleration = np.array([self.flight_forecast.az(time) for time in time_samples], dtype=float)
-            name_acceleration = "Vertical acceleration [m/s²]"
-            name_acceleration_hover = "Vertical acceleration: %{y:.1f} m/s²<extra></extra>"
-            title_yaxis2 = "Vertical acceleration [m/s²]"
-        else:
-            acceleration = np.array([self.flight_forecast.acceleration(time) for time in time_samples], dtype=float)
-            name_acceleration = "Total acceleration [m/s²]"
-            name_acceleration_hover = "Total acceleration: %{y:.1f} m/s²<extra></extra>"
-            title_yaxis2 = "Total acceleration [m/s²]"
 
-        # --- Plot ---
-        traces = [
-            # left y axis
-            {
-                "y": altitude,
-                "name": "Altitude [m]",
-                "hovertemplate": "Altitude: %{y:.1f} m<extra></extra>",
-                "line": {"color": "royalblue"},
-            },
-            {
-                "y": motion,
-                "name": name_motion,
-                "hovertemplate": name_motion_hover,
-                "line": {"color": "firebrick"},
-            },
-            # right y axis
-            {
-                "y": acceleration,
-                "name": name_acceleration,
-                "hovertemplate": name_acceleration_hover,
-                "line": {"color": "gold"},
-                "yaxis": "y2",
-            },
-        ]
+            inflation_times = []
+            if hasattr(flight, "parachute_events"):
+                for ejection_time, parachute in flight.parachute_events:
+                    inflation_times.append(ejection_time + parachute.lag)
+            first_inflation_time = min(inflation_times) if inflation_times else None
 
-        self.create_plotly_plot(
-            title=f"[{self.plot_title}] Vertical motion over time",
-            time_samples=time_samples,
-            time_start=time_start,
-            time_end=time_end,
-            traces=traces,
-            yaxis_title=title_yaxis,
-            yaxis2_title=title_yaxis2,
-            width=1300,
-            height=800,
-            event_markers=event_markers,
+            time_end = first_inflation_time if first_inflation_time is not None else float(flight.apogee_time)
+            time_samples = self.get_time_samples_for_flight(flight, time_start, time_end)
+
+            if transform_openrocket:
+                # Transform body-frame angular velocity to the flow-aligned reference frame.
+                # pitch_rate = flow-aligned reference frame y-component = -sin(theta)*w1 + cos(theta)*w2
+                # yaw_rate   = flow-aligned reference frame x-component =  cos(theta)*w1 + sin(theta)*w2
+                # Matches OpenRocket AbstractSimulationStepper: pitchRate=rot.getY(), yawRate=rot.getX().
+
+                # Angular velocity (in body frame)
+                w1 = np.array([flight.w1(t) for t in time_samples])
+                w2 = np.array([flight.w2(t) for t in time_samples])
+
+                # Rocket orientation quaternions
+                quaternions = np.column_stack([
+                    [flight.e1(t) for t in time_samples],
+                    [flight.e2(t) for t in time_samples],
+                    [flight.e3(t) for t in time_samples],
+                    [flight.e0(t) for t in time_samples],
+                ])
+
+                # Airspeed in inertial frame: rocket velocity - wind (matches OpenRocket convention)
+                vx = np.array([flight.vx(t) for t in time_samples])
+                vy = np.array([flight.vy(t) for t in time_samples])
+                vz = np.array([flight.vz(t) for t in time_samples])
+                z_alts = np.array([flight.z(t) for t in time_samples])
+                wind_vx = np.array([flight.env.wind_velocity_x(z) for z in z_alts])
+                wind_vy = np.array([flight.env.wind_velocity_y(z) for z in z_alts])
+                airspeed_inertial = np.column_stack([vx - wind_vx, vy - wind_vy, vz])
+
+                # Rotate airspeed to body frame (inverse of rocket orientation)
+                airspeed_body = Rotation.from_quat(quaternions).inv().apply(airspeed_inertial)
+
+                # Theta = azimuthal angle of airspeed lateral component in body frame
+                len_xy = np.hypot(airspeed_body[:, 0], airspeed_body[:, 1])
+                valid = len_xy > 0.001
+                safe_len = np.where(valid, len_xy, 1.0)   # avoid division by zero
+                cos_theta = np.where(valid, airspeed_body[:, 0] / safe_len, 1.0)
+                sin_theta = np.where(valid, airspeed_body[:, 1] / safe_len, 0.0)
+
+                # invRotateZ by theta: rotate body frame around z by -theta
+                angular_rate_1 = np.degrees(-sin_theta * w1 + cos_theta * w2)   # pitch (flow-aligned reference frame y)
+                angular_rate_2 = np.degrees( cos_theta * w1 + sin_theta * w2)   # yaw   (flow-aligned reference frame x)
+            else:
+                angular_rate_1 = np.degrees(np.array([flight.w1(time) for time in time_samples], dtype=float))
+                angular_rate_2 = np.degrees(np.array([flight.w2(time) for time in time_samples], dtype=float))
+
+            angular_rate_3 = np.degrees(np.array([flight.w3(time) for time in time_samples], dtype=float))
+
+            traces = [
+                {
+                    "y": angular_rate_1,
+                    "name": "pitch rate [°/s]",
+                    "hovertemplate": "pitch rate: %{y:.3f} °/s<extra></extra>",
+                    "line": {"color": "royalblue"},
+                },
+                {
+                    "y": angular_rate_2,
+                    "name": "yaw rate [°/s]",
+                    "hovertemplate": "yaw rate: %{y:.3f} °/s<extra></extra>",
+                    "line": {"color": "firebrick"},
+                },
+                {
+                    "y": angular_rate_3,
+                    "name": "roll rate [°/s]",
+                    "hovertemplate": "roll rate: %{y:.3f} °/s<extra></extra>",
+                    "line": {"color": "gold"},
+                },
+            ]
+
+            flight_groups.append(
+                {
+                    "label": plot_title,
+                    "time_samples": time_samples,
+                    "time_start": time_start,
+                    "time_end": time_end,
+                    "traces": traces,
+                    "event_markers": self.get_standard_event_markers_for_flight(flight, motor, time_samples),
+                }
+            )
+
+        self.create_grouped_plotly_plot(
+            title=f"Angular velocity ({frame_label})",
+            flight_groups=flight_groups,
+            yaxis_title="Angular rate [°/s]",
+            width=1100,
+            height=500,
+            legend_x_pos=1.02,
+            buttons_x_pos=1,
         )
-        
+
+
+    def plot_motion_over_time(self, time_interval=None, event_markers=None):
+        """
+        Plot altitude, vertical velocity, horizontal velocity, and vertical acceleration over time.
+        """
+        custom_event_markers = None
+        if event_markers is not None:
+            custom_event_markers = event_markers
+            if len(self.flight_forecasts) == 1 and (not event_markers or isinstance(event_markers[0], tuple)):
+                custom_event_markers = [event_markers]
+
+            if len(custom_event_markers) != len(self.flight_forecasts):
+                raise ValueError("event_markers must contain one marker list for each flight.")
+
+        flight_groups = []
+        for flight_index, (flight, motor, plot_title) in enumerate(zip(self.flight_forecasts, self.motors, self.plot_titles)):
+            if time_interval:
+                time_start = time_interval[0]
+                time_end = time_interval[1]
+            else:
+                time_start = 0.0
+                time_end = float(flight.t_final)
+
+            time_samples = self.get_time_samples_for_flight(flight, time_start, time_end)
+            altitude = np.array([flight.altitude(time) for time in time_samples], dtype=float)
+
+            if hasattr(flight, "vz"):
+                vertical_velocity = np.array([flight.vz(time) for time in time_samples], dtype=float)
+                name_vertical = "Vertical velocity [m/s]"
+                hover_vertical = "Vertical velocity: %{y:.1f} m/s<extra></extra>"
+            else:
+                vertical_velocity = np.array([flight.speed(time) for time in time_samples], dtype=float)
+                name_vertical = "Speed [m/s]"
+                hover_vertical = "Speed: %{y:.1f} m/s<extra></extra>"
+
+            # Horizontal velocity = sqrt(vx² + vy²): magnitude of the horizontal velocity vector.
+            # OpenRocket uses the same definition and calls it "lateral velocity".
+            if hasattr(flight, "vx") and hasattr(flight, "vy"):
+                horizontal_velocity = np.array(
+                    [math.sqrt(flight.vx(t) ** 2 + flight.vy(t) ** 2) for t in time_samples], dtype=float
+                )
+            else:
+                horizontal_velocity = np.full(len(time_samples), np.nan)
+
+            if hasattr(flight, "az"):
+                acceleration = np.array([flight.az(time) for time in time_samples], dtype=float)
+                name_acceleration = "Vertical acceleration [m/s^2]"
+                name_acceleration_hover = "Vertical acceleration: %{y:.1f} m/s^2<extra></extra>"
+            else:
+                acceleration = np.array([flight.acceleration(time) for time in time_samples], dtype=float)
+                name_acceleration = "Total acceleration [m/s^2]"
+                name_acceleration_hover = "Total acceleration: %{y:.1f} m/s^2<extra></extra>"
+
+            traces = [
+                {
+                    "y": altitude,
+                    "name": "Altitude [m]",
+                    "hovertemplate": "Altitude: %{y:.1f} m<extra></extra>",
+                    "line": {"color": "royalblue"},
+                },
+                {
+                    "y": vertical_velocity,
+                    "name": name_vertical,
+                    "hovertemplate": hover_vertical,
+                    "line": {"color": "firebrick"},
+                },
+                {
+                    "y": horizontal_velocity,
+                    "name": "Horizontal velocity [m/s]",
+                    "hovertemplate": "Horizontal velocity: %{y:.1f} m/s<extra></extra>",
+                    "line": {"color": "mediumseagreen"},
+                },
+                {
+                    "y": acceleration,
+                    "name": name_acceleration,
+                    "hovertemplate": name_acceleration_hover,
+                    "line": {"color": "gold"},
+                    "yaxis": "y2",
+                },
+            ]
+
+            if custom_event_markers is None:
+                flight_event_markers = self.get_standard_event_markers_for_flight(flight, motor, time_samples)
+            else:
+                flight_event_markers = custom_event_markers[flight_index]
+
+            flight_groups.append(
+                {
+                    "label": plot_title,
+                    "time_samples": time_samples,
+                    "time_start": time_start,
+                    "time_end": time_end,
+                    "traces": traces,
+                    "event_markers": flight_event_markers,
+                }
+            )
+
+        self.create_grouped_plotly_plot(
+            title="Motion over time",
+            flight_groups=flight_groups,
+            yaxis_title="Altitude [m] / Velocity [m/s]",
+            yaxis2_title="Acceleration [m/s^2]",
+            width=1500,
+            height=800,
+            legend_x_pos=1.05,
+            buttons_x_pos=1,
+        )
+
     @staticmethod
-    def plot_parachute_model(parachute: Parachute):
+    def plot_parachute_model(parachute: Parachute, save_dir: Path | None = None):
         """
         Plot the inflated parachute geometry as modeled by RocketPy (hemispheroid/semi-ellipsoid without hole).
         
@@ -903,10 +1065,14 @@ class CustomPlots:
             template="plotly_white",
         )
 
+        if save_dir is not None:
+            filename = re.sub(r"[^\w\-]", "_", parachute.name)
+            figure.write_html(str(save_dir / f"parachute_model_{filename}.html"))
+
         figure.show(renderer="notebook")
 
 
-def plot_wind_speed_and_heading(environment: Environment, max_expected_height_asl):
+def plot_wind_speed_and_heading(environment: Environment, max_expected_height_asl, save_dir: Path | None = None):
     """
     Plot wind speed and heading.
 
@@ -1031,5 +1197,9 @@ def plot_wind_speed_and_heading(environment: Environment, max_expected_height_as
         va="top",
         ha="right",
     )
+
+    if save_dir is not None:
+        env_name = re.sub(r"[^\w\-]", "_", getattr(environment, "name", "environment"))
+        fig.savefig(str(save_dir / f"{env_name}_wind_speed_and_heading.png"), dpi=150, bbox_inches="tight")
 
     plt.show()

@@ -1,21 +1,7 @@
 {
   "project": "ALBATROSS",
-  "_comment": ["Keys starting with _ are ignored by the config loader.",
-              "https://solaris.raketenmodellbau.org/straubing_anfahrt.php"],
+  "output_level": 2,
   "environment": {
-    "_comment": [
-      "TODO: set exact launch rail coordinates and time of launch.",
-      "date may be generic \"tomorrow_08_local\" for tomorrow 8 AM or an explicit local-time list like [2026, 6, 13, 12, 0, 0].",
-      "[°] latitude: Launch latitude 47° 12' 50.94\"",
-      "[°] longitude: Launch longitude 9° 0' 18.86\"",
-      "[m AGL] max_expected_height",
-      "[m ASL] elevation",
-      "timezone is the local launch-site timezone.",
-      "envType: use 'standard_atmosphere', 'Windy', 'custom_atmosphere', 'reanalysis' OR 'reanalysis_custom'",
-      "         - do NOT use 'reanalysis' or 'reanalysis_custom' in combination with the others.",
-      "         - reanalysis uses RocketPy's native Reanalysis mode with file + dictionary.",
-      "         - reanalysis_custom uses existing CSV files from previous exports with export_weather_data.py."
-    ],
     "_date": "tomorrow_08_local",
     "date": [2026, 5, 23, 13, 12, 0],
     "latitude": 48.8038043,
@@ -31,19 +17,11 @@
   },
 
   "engine": {
-    "_comment": "Choose from: solid or liquid",
     "type": "solid"
   },
 
   "motor": {
-    "_comment": [
-      "K700W values are from https://www.thrustcurve.org/motors/AeroTech/K700W/.",
-      "[g] total_mass, propellant_mass",
-      "[mm] diameter, length",
-      "[s] burn_time",
-      "center_of_dry_mass_factor: is multiplied by motor length to estimate the dry CG position from the nozzle.",
-      "thrust: Thrust-curve file in the project folder. Can be .eng/.rsa file for commercial motor or .csv file from static fire test."
-    ],
+    "_comment": "K700W values are from https://www.thrustcurve.org/motors/AeroTech/K700W/.",
     "name": "K700W",
     "total_mass": 2035,
     "propellant_mass": 1303,
@@ -59,8 +37,7 @@
       "[g] total_mass_without_motor (weighed)",
       "[mm] length and diameter (measured)",
       "[mm] total_CG_without_motor_from_tip (measured; FROM TIP!)",
-      "[kg*m^2] moment_of_intertia_Z and moment_of_intertia_XY (calculated)",
-      "Drag files are expected in the project folder."
+      "[kg*m^2] moment_of_intertia_Z and moment_of_intertia_XY (calculated)"
     ],
     "total_mass_without_motor": 17887,
     "length": 3755,
@@ -102,8 +79,7 @@
   "fins": {
     "_comment": [
       "[mm] position (Onshape); distance of fins coming out of rocket to rear end rocket",
-      "[m] shape_points (measured): [0,0] root leading edge; [0.1928,0.0977] up; [0.248,0.0977] straight; [0.248,-0.0123] down",
-      "No need to repeat [0, 0] at the end. RocketPy connects the polygon automatically."
+      "[m] shape_points (measured): [0,0] root leading edge; [0.1928,0.0977] up; [0.248,0.0977] straight; [0.248,-0.0123] down"
     ],
     "amount": 4,
     "position": 239.36126,
@@ -115,12 +91,9 @@
     "main": {
       "_comment": [
         "TODO: need projected area of parachute",
-        "if cd_s is provided cd and radius are optional",
         "[m] radius of projected area; current value is 2.1 m / 2.",
-        "[m AGL] trigger",
         "[Hz] sampling_rate - we use a default value",
-        "[s] lag (measured) - optional",
-        "[Pa] noise; [mean, standard deviation, time-correlation] - optional"
+        "[s] lag (measured)"
       ],
       "cd": 1.8,
       "radius": 1.05,
@@ -144,15 +117,6 @@
   },
 
   "flight": {
-    "_comment": [
-      "[m] rail_length",
-      "[°] inclination is in degrees; 0 = horizontal, 90 = vertical.",
-      "[°] heading is in degrees; 0 = north, 90 = east.",
-      "heading/inclination can be:",
-      " - be a single float number", 
-      " - a range string (e.g. 86..90:2 meaning: from 86 to 90 in 2-steps yielding 86, 88, 90",
-      " - a list of specific values, e.g. [86, 87, 90]"
-    ],
     "rail_length": 7,
     "inclination": 88,
     "_inclination": "84..88:2",
@@ -161,17 +125,15 @@
   },
 
   "payload": {
-    "_comment": "[g] mass_total. Use 0 when no deployable payload is separated.",
     "mass_total": 0
   },
 
   "reanalysis": {
-    "_comment":"Add sources as a list. Choose from: cats_vega, altimax, rcu",
     "sources": ["cats_vega"],
 
     "matched_flight": {
-      "_comment": "Time [s] to split in a matched flight (attitude+velocity+GNSS heading from CATS Vega data at that time). Omit this block to skip.",
       "match_time": 1.6,
+      "match_parameters": ["heading", "inclination", "velocity"],
       "motor": {
         "_comment": "burn time as marked by CATS Vega",
         "burn_time": 3

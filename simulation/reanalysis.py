@@ -1,5 +1,8 @@
 """
 Reanalysis: compare onboard flight-computer data to the RocketPy simulation post-flight.
+
+Altimax G4: https://www.rocketronics.de/download/doku/ALTIMAXG4-EN-MANUAL%20en-US.pdf
+CATS Vega: https://github.com/catsystems/cats-embedded/raw/main/CATS%20User%20Manual.pdf
 """
 
 import copy
@@ -7,8 +10,7 @@ import inspect
 import warnings
 
 import numpy as np
-import plotly.graph_objects as go
-from rocketpy import Function, Flight, LiquidMotor, Motor, Parachute, SolidMotor
+from rocketpy import EmptyMotor, Function, Flight, LiquidMotor, Motor, Parachute, SolidMotor
 from rocketpy.simulation.flight_data_importer import FlightDataImporter
 from pyproj import Geod
 from scipy.spatial.transform import Rotation, Slerp
@@ -17,6 +19,7 @@ import pandas as pd
 
 from simulation.utils import *
 from simulation.custom_print_and_plot_functions import CustomPlots
+from simulation.config_schema import SimParams
 
 
 # =============================================================================
@@ -79,7 +82,6 @@ RCU_COLUMNS_MAP = {
     "lora:rcu_barometer:sensor": "pressure",
 }
 
-
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -107,9 +109,9 @@ def _print_simulated_error_line(label, actual, simulated, unit, unit_error=None)
     )
 
 
-def cats_event_markers(project_path):
+def cats_event_markers(params: SimParams):
     """Load events markers from CATS vega."""
-    event_file_path = project_path / CATS_FOLDER / "eventInfo.csv"
+    event_file_path = params.project_path / CATS_FOLDER / "eventInfo.csv"
 
     event_markers = []
 
@@ -142,7 +144,7 @@ def cats_event_markers(project_path):
 
 SUPPORTED_SOURCES = ("cats_vega", "altimax", "rcu")
 
-def load_flight_computer_data(project_path, sources):
+def load_flight_computer_data(params: SimParams, sources):
     """Load flight-computer CSVs for the selected sources. Returns a dict keyed by source name."""
     unknown = set(sources) - set(SUPPORTED_SOURCES)
     if unknown:
@@ -153,7 +155,7 @@ def load_flight_computer_data(project_path, sources):
     if "cats_vega" in sources:
         data["cats_vega"] = FlightDataImporter(
             name="CATS Vega Flight Data",
-            paths=[str(project_path / CATS_FOLDER / name) for name in CATS_FILES],
+            paths=[str(params.project_path / CATS_FOLDER / name) for name in CATS_FILES],
             columns_map=CATS_COLUMNS_MAP,
             units=None,
             interpolation="linear",
@@ -165,7 +167,7 @@ def load_flight_computer_data(project_path, sources):
     if "altimax" in sources:
         data["altimax"] = FlightDataImporter(
             name="Altimax Flight Data",
-            paths=[str(project_path / ALTIMAX_FOLDER / name) for name in ALTIMAX_FILES],
+            paths=[str(params.project_path / ALTIMAX_FOLDER / name) for name in ALTIMAX_FILES],
             columns_map=ALTIMAX_COLUMNS_MAP,
             units=None,
             interpolation="linear",
@@ -177,7 +179,7 @@ def load_flight_computer_data(project_path, sources):
     if "rcu" in sources:
         data["rcu"] = FlightDataImporter(
             name="SRAD Flight Data",
-            paths=[str(project_path / RCU_FOLDER / name) for name in RCU_FILES],
+            paths=[str(params.project_path / RCU_FOLDER / name) for name in RCU_FILES],
             columns_map=RCU_COLUMNS_MAP,
             units=None,
             interpolation="linear",
@@ -190,41 +192,39 @@ def load_flight_computer_data(project_path, sources):
 
 
 
-def _parachute_overrides_from_config(constants, variations):
-    """Extract per-parachute override dicts from flattened reanalysis.matched_flight.parachutes.<name>.<param> config keys.
+def _parachute_overrides_from_config(params: SimParams):
+    """Extract per-parachute override dicts from the typed reanalysis config.
 
     Returns {parachute_name: {param: value}}. Empty dict when no overrides are configured.
-    Assumes parachute names do not themselves contain underscores (e.g. main, drogue).
     """
-    prefix = "reanalysis_matched_flight_parachutes_"
-    overrides = {}
-    for source in (constants, variations):
-        for key, value in source.items():
-            if not key.startswith(prefix):
-                continue
-            remainder = key[len(prefix):]
-            parts = remainder.split("_", 1)
-            if len(parts) != 2:
-                continue
-            parachute_name, param = parts
-            overrides.setdefault(parachute_name, {})[param] = value
-    return overrides
+    matched = params.config.reanalysis and params.config.reanalysis.matched_flight
+    if not matched or not matched.parachutes:
+        return {}
+    return {
+        name: override.model_dump(exclude_none=True)
+        for name, override in matched.parachutes.items()
+    }
 
 
-def _motor_overrides_from_config(constants, variations):
-    """Extract matched-flight motor overrides from flattened reanalysis.matched_flight.motor.<param> config keys."""
-    prefix = "reanalysis_matched_flight_motor_"
-    overrides = {}
-    for source in (constants, variations):
-        for key, value in source.items():
-            if key.startswith(prefix):
-                overrides[key[len(prefix):]] = value
-    return overrides
+def _motor_overrides_from_config(params: SimParams):
+    """Extract matched-flight motor overrides from the typed reanalysis config."""
+    matched = params.config.reanalysis and params.config.reanalysis.matched_flight
+    if not matched or not matched.motor:
+        return {}
+    return matched.motor.model_dump(exclude_none=True)
+
+
+def _match_parameters_from_config(params: SimParams):
+    """Read which flight-computer parameters to match. Returns a set of parameter names."""
+    matched = params.config.reanalysis and params.config.reanalysis.matched_flight
+    if not matched:
+        return set()
+    return set(matched.match_parameters)
 
 # TODO: maybe implement parachute and motor creation for the matched flight in simulation.py instead of here 
 # for less code duplication.
 
-def rebuild_motor_from_overrides(nominal_motor: Motor, overrides: dict, project_path=None):
+def rebuild_motor_from_overrides(nominal_motor: Motor, overrides: dict, params=None):
     """Build a new RocketPy motor with only thrust source and burn time overrides applied."""
     if not overrides:
         return nominal_motor
@@ -238,8 +238,8 @@ def rebuild_motor_from_overrides(nominal_motor: Motor, overrides: dict, project_
         )
 
     thrust_source = overrides.get("thrust", nominal_motor.thrust_source)
-    if isinstance(thrust_source, str) and project_path is not None:
-        thrust_source = get_project_file({"project": project_path}, thrust_source)
+    if isinstance(thrust_source, str) and params is not None:
+        thrust_source = get_project_file(params, thrust_source)
 
     dry_inertia = (
         nominal_motor.dry_I_11,
@@ -281,7 +281,6 @@ def rebuild_motor_from_overrides(nominal_motor: Motor, overrides: dict, project_
         raise TypeError("Matched-flight motor overrides currently support SolidMotor only.")
 
     raise TypeError(f"Matched-flight motor overrides do not support motor type {type(nominal_motor).__name__}.")
-
 
 
 def rebuild_parachute_from_overrides(nominal_parachute: Parachute, overrides: dict):
@@ -328,9 +327,9 @@ def rebuild_parachute_from_overrides(nominal_parachute: Parachute, overrides: di
     return Parachute(**parachute_options)
 
 
-def cats_quaternion_at(project_path, t):
+def cats_quaternion_at(params: SimParams, t):
     """Load the CATS Vega attitude quaternion (xyzw, normalized) at time t by spherical interpolation."""
-    orientation_file = project_path / CATS_FOLDER / "orientationInfo.csv"
+    orientation_file = params.project_path / CATS_FOLDER / "orientationInfo.csv"
     orientation_data = pd.read_csv(orientation_file)
     times = orientation_data["ts"].to_numpy()
 
@@ -384,12 +383,12 @@ def compute_gnss_bearing(flight_computer, t_start, t_end):
     return _bearing_between_samples(times, lats, lons, t_start, t_end, min_displacement_m=1e-3)
 
 
-def compute_cats_gnss_heading_at_times(project_path, times, window_half_width=0.5):
+def compute_cats_gnss_heading_at_times(params: SimParams, times, window_half_width=0.5):
     """
     For each requested time, compute the CATS GNSS-derived heading averaged over [t - window, t + window]. 
     Returns NaN where unavailable.
     """
-    gnss_file = project_path / CATS_FOLDER / "gnssInfo.csv"
+    gnss_file = params.project_path / CATS_FOLDER / "gnssInfo.csv"
     headings = np.full(len(times), np.nan)
     if not gnss_file.exists():
         return headings
@@ -410,11 +409,16 @@ def compute_cats_gnss_heading_at_times(project_path, times, window_half_width=0.
     return headings
 
 
-def create_matched_flight(nominal_flight: Flight, project_path, t_match, data=None, parachute_overrides=None, motor_overrides=None):
+def create_matched_flight(nominal_flight: Flight, params: SimParams, t_match, data=None, parachute_overrides=None, motor_overrides=None, match_parameters=None):
     """
-    Create a Flight that branches off nominal at t_match with attitude+velocity rotated to match CATS pitch and GNSS heading at 
-    that time, optionally rebuilding motor/parachutes from config overrides.
+    Create a Flight that branches off nominal at t_match, optionally matching heading, inclination, and velocity
+    to flight-computer data. Which parameters to match is controlled by match_parameters.
     """
+    match_parameters = match_parameters or set()
+    match_heading = "heading" in match_parameters
+    match_inclination = "inclination" in match_parameters
+    match_velocity = "velocity" in match_parameters
+
     # Sample the 14-element RocketPy state vector [t, x, y, z, vx, vy, vz, e0..e3, w1..w3] from a Flight at time t.
     state = [
         t_match,
@@ -430,14 +434,18 @@ def create_matched_flight(nominal_flight: Flight, project_path, t_match, data=No
     # RocketPy body +Z is the rocket longitudinal axis
     sim_rocket_axis_world = sim_rotation.apply([0.0, 0.0, 1.0])
 
-    # CATS rocket axis in its own world frame — Z component is the pitch (earth-true); X/Y are bogus (sensor-fixed frame)
-    cats_rotation = Rotation.from_quat(cats_quaternion_at(project_path, t_match))
-    cats_rocket_axis_cats_world = cats_rotation.apply([0.0, 0.0, -1.0])    # body -Z is the rocket axis (same assumption as plot_cats_attitude_angle)
-    pitch_from_vertical_rad = float(np.arccos(np.clip(cats_rocket_axis_cats_world[2], -1.0, 1.0)))
+    # Pitch from CATS quaternion or from the nominal simulation
+    if match_inclination:
+        # CATS rocket axis in its own world frame — Z component is the pitch (earth-true); X/Y are bogus (sensor-fixed frame)
+        cats_rotation = Rotation.from_quat(cats_quaternion_at(params, t_match))
+        cats_rocket_axis_cats_world = cats_rotation.apply([0.0, 0.0, -1.0])
+        pitch_from_vertical_rad = float(np.arccos(np.clip(cats_rocket_axis_cats_world[2], -1.0, 1.0)))
+    else:
+        pitch_from_vertical_rad = float(np.arccos(np.clip(sim_rocket_axis_world[2], -1.0, 1.0)))
 
-    # GNSS-derived heading at t_match (compass-true). Prefer CATS GNSS, fall back to RCU.
+    # GNSS-derived heading or nominal simulation heading
     heading_rad = None
-    if data is not None:
+    if match_heading and data is not None:
         for source_key in ("cats_vega", "rcu"):
             if source_key not in data:
                 continue
@@ -445,18 +453,19 @@ def create_matched_flight(nominal_flight: Flight, project_path, t_match, data=No
             if bearing is not None:
                 heading_rad = np.radians(bearing)
                 break
+        if heading_rad is None:
+            print("[reanalysis] create_matched_flight: heading=True but no GNSS bearing available, using nominal heading.")
+    if heading_rad is None:
+        # Use the nominal simulation azimuth as fallback (arctan2 of the ENU east/north components)
+        heading_rad = float(np.arctan2(sim_rocket_axis_world[0], sim_rocket_axis_world[1]))
 
-    # Build the desired rocket axis in earth (ENU) frame from CATS pitch + GNSS heading
-    if heading_rad is not None:
-        desired_axis_world = np.array([
-            np.sin(pitch_from_vertical_rad) * np.sin(heading_rad),    # east  (X)
-            np.sin(pitch_from_vertical_rad) * np.cos(heading_rad),    # north (Y)
-            np.cos(pitch_from_vertical_rad),                          # up    (Z)
-        ])
-    else:
-        # GNSS unavailable — fall back to CATS quaternion only (bogus azimuth, but pitch is still right)
-        print("[reanalysis] create_matched_flight: no GNSS bearing available at t_match, falling back to CATS-only attitude (azimuth will be wrong).")
-        desired_axis_world = cats_rocket_axis_cats_world
+    # Build the desired rocket axis in earth (ENU) frame from pitch + heading.
+    # When neither is matched both values come from the nominal sim, so desired_axis == sim_rocket_axis and correction = identity.
+    desired_axis_world = np.array([
+        np.sin(pitch_from_vertical_rad) * np.sin(heading_rad),    # east  (X)
+        np.sin(pitch_from_vertical_rad) * np.cos(heading_rad),    # north (Y)
+        np.cos(pitch_from_vertical_rad),                          # up    (Z)
+    ])
 
     # Shortest-path correction that maps simulation rocket axis onto the desired axis
     vec_from = sim_rocket_axis_world / np.linalg.norm(sim_rocket_axis_world)
@@ -482,7 +491,21 @@ def create_matched_flight(nominal_flight: Flight, project_path, t_match, data=No
     new_rotation = correction * sim_rotation
     new_quat_xyzw = new_rotation.as_quat()
     new_quat_wxyz = [new_quat_xyzw[3], new_quat_xyzw[0], new_quat_xyzw[1], new_quat_xyzw[2]]
-    new_velocity = correction.apply(state[4:7])
+
+    # Rotate the nominal velocity direction to align with the corrected attitude (zero AoA)
+    rotated_velocity = correction.apply(state[4:7])
+
+    # Optionally scale the velocity magnitude to match CATS measured speed at t_match.
+    # Average over a ±0.5 s window to reduce the effect of sensor noise at any single sample.
+    if match_velocity and data is not None and "cats_vega" in data and hasattr(data["cats_vega"], "speed"):
+        window = 0.5
+        t_samples = np.linspace(t_match - window, t_match + window, 21)
+        cats_speed = float(np.mean([data["cats_vega"].speed(t) for t in t_samples]))
+        nominal_speed = float(np.linalg.norm(rotated_velocity))
+        if nominal_speed > 1e-9:
+            rotated_velocity = rotated_velocity * (cats_speed / nominal_speed)
+
+    new_velocity = rotated_velocity
 
     new_state = [
         state[0],
@@ -502,12 +525,14 @@ def create_matched_flight(nominal_flight: Flight, project_path, t_match, data=No
         rebuilt_motor = rebuild_motor_from_overrides(
             matched_rocket.motor,
             motor_overrides,
-            project_path=project_path,
+            params=params,
         )
-        matched_rocket.add_motor(
-            rebuilt_motor,
-            position=matched_rocket.motor_position,
-        )
+        # Replace with EmptyMotor before adding the rebuilt one so RocketPy's
+        # "only one motor" guard doesn't trigger. motor_position is saved first
+        # because it is stored directly on the rocket (not derived from the motor).
+        motor_position = matched_rocket.motor_position
+        matched_rocket.motor = EmptyMotor()
+        matched_rocket.add_motor(rebuilt_motor, position=motor_position)
 
     # Each matching parachute is rebuilt with merged params; parachutes with enabled=False are dropped.
     if parachute_overrides:
@@ -543,8 +568,7 @@ def create_matched_flight(nominal_flight: Flight, project_path, t_match, data=No
         name=f"{nominal_flight.env.name}_matched",
     )
 
-    # attach_meta sets `filename_label` and `name`; downstream code (KML/CSV export) expects both
-    attach_meta(matched_flight, getattr(nominal_flight, "_meta", {}))
+    tag_variation(matched_flight, getattr(nominal_flight, "_meta", {}))
     matched_flight.splice_time = t_match
 
     # Pre-warm matched's internals so the shallow-copied splice inherits valid caches.
@@ -828,11 +852,150 @@ def compare_gnss(flight, data, matched_flight=None):
     Function.compare_plots(lon_traces, title="Longitude Comparison", xlabel="Time (s)", ylabel="Longitude (deg)")
 
 
-def plot_cats_attitude_angle(project_path, custom_plots, event_markers):
+
+def plot_vertical_motion_per_source(flight: Flight, data, motor: Motor, rocket, rocket_config, cats_markers=None, matched_flight=None, save_dir=None):
+    """Plot altitude / vertical velocity / vertical acceleration for the nominal/matched simulation and all compatible flight computers in one grouped plot."""
+    # SRAD/RCU has no speed or altitude trace we can plot here
+    sources_in_order = []
+    if "cats_vega" in data:
+        sources_in_order.append(("cats_vega", "CATS VEGA"))
+    if "altimax" in data:
+        sources_in_order.append(("altimax", "ALTIMAX"))
+
+    # Nothing useful to compare if there are no external sources and no matched flight
+    if not sources_in_order and matched_flight is None:
+        return
+
+    forecasts = []
+    motors = []
+    plot_titles = []
+    rockets = []
+    rocket_configs = []
+    event_markers_per_source = []
+
+    nominal_label = "RocketPy (nominal)"
+    max_time_end = float(flight.t_final)
+
+    # Nominal RocketPy flight first — markers filled in below after CustomPlots is built
+    forecasts.append(flight)
+    motors.append(motor)
+    plot_titles.append(nominal_label)
+    rockets.append(rocket)
+    rocket_configs.append(rocket_config)
+    event_markers_per_source.append([])
+
+    # Matched RocketPy flight (raw post-splice only, starts at t_match) — markers filled in below
+    if matched_flight is not None:
+        max_time_end = max(max_time_end, float(matched_flight.t_final))
+        forecasts.append(matched_flight)
+        motors.append(motor)
+        plot_titles.append("RocketPy (matched)")
+        rockets.append(rocket)
+        rocket_configs.append(rocket_config)
+        event_markers_per_source.append([])
+
+    # Flight-computer sources — CATS gets its native event log + derived rail exit; Altimax gets only rail exit
+    for source_key, name in sources_in_order:
+        forecast = data[source_key]
+
+        markers = []
+        if source_key == "cats_vega" and cats_markers:
+            markers.extend(cats_markers)
+            print("Event markers from CATS Vega. 'Out Of Rail' derived.")
+        rail_exit_time = find_rail_exit_time(forecast, flight.effective_1rl)
+        if rail_exit_time is not None:
+            markers.append((rail_exit_time, "Out Of Rail", "red"))
+
+        time_end = float(np.asarray(forecast.time)[-1])
+        max_time_end = max(max_time_end, time_end)
+
+        forecasts.append(forecast)
+        motors.append(motor)
+        plot_titles.append(name)
+        rockets.append(rocket)
+        rocket_configs.append(rocket_config)
+        event_markers_per_source.append(markers)
+
+    custom_plots = CustomPlots(
+        flight_forecast=forecasts,
+        motor=motors,
+        plot_title=plot_titles,
+        rocket=rockets,
+        rocket_config=rocket_configs,
+        save_dir=save_dir,
+    )
+
+    # Compute standard simulation event markers (apogee, burnout, parachute events, transonic/supersonic)
+    # for each RocketPy flight and fill in the placeholders left above.
+    rocketpy_flights = [flight] + ([matched_flight] if matched_flight is not None else [])
+    for i, rocketpy_flight in enumerate(rocketpy_flights):
+        time_samples = custom_plots.get_time_samples_for_flight(rocketpy_flight, 0, max_time_end)
+        event_markers_per_source[i] = custom_plots.get_standard_event_markers_for_flight(
+            rocketpy_flight, motor, time_samples
+        )
+
+    custom_plots.plot_motion_over_time(
+        time_interval=(0, max_time_end),
+        event_markers=event_markers_per_source,
+    )
+
+
+def compare_rail_exit_velocity(flight: Flight, data):
+    """Compare the nominal sim rail exit velocity against CATS / Altimax observations."""
+    print(f"Effective rail length: {flight.effective_1rl:.3f} m")
+
+    for source_key, label in (("cats_vega", "CATS Vega"), ("altimax", "Altimax")):
+        if source_key not in data:
+            continue
+
+        crossing_time = find_rail_exit_time(data[source_key], flight.effective_1rl)
+        if crossing_time is None:
+            print(f"  {label}: rail exit altitude never reached, skipping.")
+            continue
+
+        actual_velocity = float(data[source_key].speed(crossing_time))
+
+        print(f"Actual rail exit velocity ({label}, at {crossing_time:.3f} s): {actual_velocity:.2f} m/s")
+        _print_simulated_error_line("rail exit velocity (nominal)", actual_velocity, flight.out_of_rail_velocity, "m/s")
+    print("\n")
+    
+
+def compare_speed(flight, data, matched_flight=None):
+    """Compare peak speed and the speed trace against whichever speed-reporting sources are loaded."""
+    # Prefer Altimax for the reference (pre-filtered), fall back to CATS
+    if "altimax" in data:
+        speed_actual = data["altimax"].speed.max
+    elif "cats_vega" in data:
+        speed_actual = data["cats_vega"].speed.max
+    else:
+        speed_actual = None
+
+    if speed_actual is not None:
+        print(f"Actual max speed: {speed_actual:.2f} m/s")
+        if matched_flight is not None:
+            _print_simulated_error_line("max speed (nominal)", speed_actual, flight.speed.max, "m/s")
+            _print_simulated_error_line("max speed (matched)", speed_actual, matched_flight.speed.max, "m/s")
+        else:
+            _print_simulated_error_line("max speed", speed_actual, flight.speed.max, "m/s")
+
+    traces = [(flight.vz, "RocketPy (nominal)" if matched_flight is not None else "RocketPy")]
+    if matched_flight is not None:
+        traces.append((matched_flight.vz, "RocketPy (matched)"))
+
+    if "cats_vega" in data:
+        traces.append((data["cats_vega"].speed, "CATS Vega"))
+
+    if "altimax" in data:
+        traces.append((data["altimax"].speed, "Altimax"))
+
+    Function.compare_plots(traces, title="Speed Comparison", xlabel="Time (s)", ylabel="Speed (m/s)")
+
+
+def plot_cats_attitude_angle(params: SimParams, custom_plots: CustomPlots, event_markers):
     """
     Plot the CATS Vega attitude angle from vertical over time.
     """
-    orientation_file_path = project_path / CATS_FOLDER / "orientationInfo.csv"
+    orientation_file_path = params.project_path / CATS_FOLDER / "orientationInfo.csv"
     
     # -------------------------------------------------------------------------
     # Load and compute attitude angle
@@ -873,7 +1036,7 @@ def plot_cats_attitude_angle(project_path, custom_plots, event_markers):
     time_end = float(time_samples[-1])
 
     # GNSS-derived compass heading sampled at the same timestamps, plotted on the secondary y-axis
-    heading_deg = compute_cats_gnss_heading_at_times(project_path, time_samples, window_half_width=0.5)
+    heading_deg = compute_cats_gnss_heading_at_times(params, time_samples, window_half_width=0.5)
 
     traces = [
         {
@@ -891,17 +1054,20 @@ def plot_cats_attitude_angle(project_path, custom_plots, event_markers):
         },
     ]
 
-    custom_plots.create_plotly_plot(
+    custom_plots.create_grouped_plotly_plot(
         title="CATS Vega attitude angle from horizontal & GNSS heading",
-        time_samples=time_samples,
-        time_start=time_start,
-        time_end=time_end,
-        traces=traces,
+        flight_groups=[{
+            "label": "",
+            "time_samples": time_samples,
+            "time_start": time_start,
+            "time_end": time_end,
+            "traces": traces,
+            "event_markers": event_markers,
+        }],
         yaxis_title="Attitude angle from horizontal [°]",
         yaxis2_title="Heading (compass, °)",
-        width=900,
+        width=1100,
         height=500,
-        event_markers=event_markers,
     )
     
 
@@ -945,252 +1111,162 @@ def compare_acceleration(flight: Flight, data, motor: Motor, matched_flight: Fli
     """Compare peak burn-phase acceleration and the vertical acceleration trace from whichever sources are loaded."""
 
     if "altimax" in data:
-        acceleration_actual = data["altimax"].acceleration.crop([(0, motor.burn_out_time + 10)]).max
-        acceleration_simulated = flight.acceleration.crop([(0, motor.burn_out_time + 10)]).max
-        print(f"Actual max acceleration during burn: {acceleration_actual:.2f} m/s2")
+        acceleration_actual = (data["altimax"].acceleration.crop([(0, motor.burn_out_time + 10)]) / 10 * (-9.80665)).max
+        acceleration_simulated = flight.az.crop([(0, motor.burn_out_time + 10)]).max
+        print(f"Actual max vertical acceleration during burn: {acceleration_actual:.2f} m/s2")
         if matched_flight is not None:
             matched_acceleration_simulated = matched_flight.acceleration.crop([(0, motor.burn_out_time + 10)]).max
             _print_simulated_error_line(
-                "max acceleration during burn (nominal)",
+                "max vertical acceleration during burn (nominal)",
                 acceleration_actual,
                 acceleration_simulated,
                 "m/s2",
             )
             _print_simulated_error_line(
-                "max acceleration during burn (matched)",
+                "max vertical acceleration during burn (matched)",
                 acceleration_actual,
                 matched_acceleration_simulated,
                 "m/s2",
             )
         else:
             _print_simulated_error_line(
-                "max acceleration during burn",
+                "max vertical acceleration during burn",
                 acceleration_actual,
                 acceleration_simulated,
                 "m/s2",
             )
 
-    traces = [(flight.ay.crop([(0, flight.t_final)]), "RocketPy (nominal)" if matched_flight is not None else "RocketPy")]
+    traces = [(flight.az.crop([(0, flight.t_final)]), "RocketPy (nominal) vertical acceleration")]
     if matched_flight is not None:
-        traces.append((matched_flight.ay.crop([(0, matched_flight.t_final)]), "RocketPy (matched)"))
+        traces.append((matched_flight.az.crop([(0, matched_flight.t_final)]), "RocketPy (matched) vertical acceleration"))
 
     if "cats_vega" in data:
-        # CATS reports in 0.1g units with inverted sign, so divide by 10 and flip
         time_end = float(np.asarray(data["cats_vega"].time)[-1])
-        traces.append((data["cats_vega"].az.crop([(0, time_end)]) / 10 * (-1), "CATS Vega"))
+        traces.append((data["cats_vega"].az.crop([(0, time_end)]), "CATS Vega filtered acceleration"))
 
     if "altimax" in data:
-        # Altimax reports in 0.1g units with inverted sign as well
+        # Convert Altimax 0.1 g to g then to m/s^2 and flip the sign.
         time_end = float(np.asarray(data["altimax"].time)[-1])
-        traces.append((data["altimax"].acceleration.crop([(0, time_end)]) / 10 * (-1), "Altimax"))
+        traces.append((data["altimax"].acceleration.crop([(0, time_end)]) / 10 * (-9.80665), "Altimax vertical acceleration"))
 
     if "rcu" in data:
         time_end = float(np.asarray(data["rcu"].time)[-1])
-        traces.append((data["rcu"].accel_y.crop([(0, time_end)]), "SRAD Acceleration Y"))
+        traces.append((data["rcu"].accel_z.crop([(0, time_end)]), "SRAD Acceleration Z"))
 
     Function.compare_plots(
         traces,
-        title="Acceleration Comparison",
+        title="Vertical Acceleration Comparison",
         xlabel="Time (s)",
         ylabel="Vertical acceleration (m/s^2)",
     )
-
-
-def compare_speed(flight, data, matched_flight=None):
-    """Compare peak speed and the speed trace against whichever speed-reporting sources are loaded."""
-    # Prefer Altimax for the reference (pre-filtered), fall back to CATS
-    if "altimax" in data:
-        speed_actual = data["altimax"].speed.max
-    elif "cats_vega" in data:
-        speed_actual = data["cats_vega"].speed.max
-    else:
-        speed_actual = None
-
-    if speed_actual is not None:
-        print(f"Actual max speed: {speed_actual:.2f} m/s")
-        if matched_flight is not None:
-            _print_simulated_error_line("max speed (nominal)", speed_actual, flight.speed.max, "m/s")
-            _print_simulated_error_line("max speed (matched)", speed_actual, matched_flight.speed.max, "m/s")
-        else:
-            _print_simulated_error_line("max speed", speed_actual, flight.speed.max, "m/s")
-
-    traces = [(flight.vz, "RocketPy (nominal)" if matched_flight is not None else "RocketPy")]
-    if matched_flight is not None:
-        traces.append((matched_flight.vz, "RocketPy (matched)"))
-
-    if "cats_vega" in data:
-        traces.append((data["cats_vega"].speed, "CATS Vega"))
-
-    if "altimax" in data:
-        traces.append((data["altimax"].speed, "Altimax"))
-
-    Function.compare_plots(traces, title="Speed Comparison", xlabel="Time (s)", ylabel="Speed (m/s)")
-
-
-def plot_vertical_motion_per_source(flight: Flight, data, motor: Motor, rocket, rocket_config, cats_markers=None):
-    """Plot altitude / vertical velocity / vertical acceleration over time for each compatible flight computer."""
-    # SRAD/RCU has no speed trace
-    sources_in_order = []
-    if "cats_vega" in data:
-        sources_in_order.append(("cats_vega", "CATS VEGA"))
-    if "altimax" in data:
-        sources_in_order.append(("altimax", "ALTIMAX"))
-
-    for source_key, name in sources_in_order:
-        forecast = data[source_key]
-
-        # Build per-source event markers: CATS gets its native event log + rail exit, Altimax gets only rail exit
-        markers = []
-        if source_key == "cats_vega" and cats_markers:
-            markers.extend(cats_markers)
-            print("Event markers from CATS Vega. 'Out Of Rail' derived.")
-        rail_exit_time = find_rail_exit_time(forecast, flight.effective_1rl)
-        if rail_exit_time is not None:
-            markers.append((rail_exit_time, "Out Of Rail", "red"))
-
-        custom_plots = CustomPlots(
-            flight_forecast=forecast,
-            motor=motor,
-            plot_title=name,
-            rocket=rocket,
-            rocket_config=rocket_config,
-        )
-        time_end = float(np.asarray(forecast.time)[-1])
-        custom_plots.plot_vertical_motion(time_interval=(0, time_end), event_markers=markers or None)
-
-
-def compare_rail_exit_velocity(flight: Flight, data):
-    """Compare the nominal sim rail exit velocity against CATS / Altimax observations."""
-    print(f"Effective rail length: {flight.effective_1rl:.3f} m")
-
-    for source_key, label in (("cats_vega", "CATS Vega"), ("altimax", "Altimax")):
-        if source_key not in data:
-            continue
-
-        crossing_time = find_rail_exit_time(data[source_key], flight.effective_1rl)
-        if crossing_time is None:
-            print(f"  {label}: rail exit altitude never reached, skipping.")
-            continue
-
-        actual_velocity = float(data[source_key].speed(crossing_time))
-
-        print(f"Actual rail exit velocity ({label}, at {crossing_time:.3f} s): {actual_velocity:.2f} m/s")
-        _print_simulated_error_line("rail exit velocity (nominal)", actual_velocity, flight.out_of_rail_velocity, "m/s")
-    print("\n")
 
 
 # =============================================================================
 # Entry
 # =============================================================================
 
-def _resolve_reanalysis_setup(constants, variations):
-    """Shared preamble: returns (flights_by_env, reanalysis_envs, sources, project_path) or None when reanalysis should be skipped."""
-    if any(key in variations for key in VARIATION_KEYS):
+def _get_reanalysis_env_names(params: SimParams):
+    """Return reanalysis environment names, or None when reanalysis should be skipped."""
+    if has_variations(params.config):
         print("No reanalysis for variations.")
         return None
 
-    flights_by_env, _ = lookup("flights_by_env", constants, variations)
+    if not params.runtime.flights_by_env:
+        return None
 
-    reanalysis_envs = [name for name in flights_by_env if name.startswith("Reanalysis")]
+    reanalysis_envs = [name for name in params.runtime.flights_by_env if name.startswith("Reanalysis")]
     if not reanalysis_envs:
         return None
 
-    try:
-        sources, _ = lookup("reanalysis_sources", constants, variations)
-    except KeyError:
-        print("[reanalysis] No 'reanalysis.sources' configured, skipping.")
+    if params.config.reanalysis is None:
+        print("[reanalysis] No 'reanalysis' section configured, skipping.")
         return None
 
-    if not sources:
+    if not params.config.reanalysis.sources:
         print("[reanalysis] 'reanalysis.sources' is empty, skipping.")
         return None
 
-    return flights_by_env, reanalysis_envs, sources, constants["project_path"]
+    return reanalysis_envs
 
 
-def build_reanalysis_artifacts(constants, variations):
+def build_reanalysis_artifacts(params: SimParams):
+    """Build the matched flight (if configured) and compute flight-computer impact markers.
+
+    Stores results in params.runtime. Must run BEFORE outputs.run_notebook_display_mode.
     """
-    Build the matched flight (if configured) and compute flight-computer impact markers, registering both so the display
-    stage picks them up. Must run BEFORE outputs.run_notebook_display_mode. Silent except for status lines.
-    """
-    setup = _resolve_reanalysis_setup(constants, variations)
-    if setup is None:
-        return constants, variations
-    flights_by_env, reanalysis_envs, sources, project_path = setup
+    reanalysis_envs = _get_reanalysis_env_names(params)
+    if reanalysis_envs is None:
+        return
 
-    # Reanalysis.matched_flight.match_time controls whether a CATS-attitude-matched flight is also simulated; missing key = skip
-    try:
-        match_time, _ = lookup("reanalysis_matched_flight_match_time", constants, variations)
-    except KeyError:
-        match_time = None
+    matched_flight_config = params.config.reanalysis.matched_flight if params.config.reanalysis else None
+    match_time = matched_flight_config.match_time if matched_flight_config else None
 
-    # Per-parachute overrides for the matched flight (e.g. main didn't deploy, drogue had different cd). Empty when none configured.
-    parachute_overrides = _parachute_overrides_from_config(constants, variations)
-    motor_overrides = _motor_overrides_from_config(constants, variations)
+    parachute_overrides = _parachute_overrides_from_config(params)
+    motor_overrides = _motor_overrides_from_config(params)
+    match_parameters = _match_parameters_from_config(params)
 
     flight_computer_impacts = []
     flight_computer_data_by_env = {}
+    gnss_3d_traces = {}
 
     for env_name in reanalysis_envs:
-        scenario_sets = flights_by_env[env_name]
+        scenario_sets = params.runtime.flights_by_env[env_name]
         nominal_flight = scenario_sets[0]["nominal"]
 
-        # Load once here, then register so the comparison stage can reuse the same imported data.
-        data = load_flight_computer_data(project_path, sources)
+        # Load once; store so the comparison stage can reuse the same imported data.
+        data = load_flight_computer_data(params, params.config.reanalysis.sources)
         flight_computer_data_by_env[env_name] = data
         flight_computer_impacts.extend(compute_flight_computer_impacts(data, nominal_flight.env))
 
-        if match_time is not None and "cats_vega" in sources:
-            print(f"[reanalysis] Creating matched flight at t={match_time:.3f} s using CATS Vega attitude angle, velocity vector and GNSS bearing...")
+        if match_time is not None and "cats_vega" in params.config.reanalysis.sources:
+            matched_params_str = ", ".join(sorted(match_parameters)) or "none"
+            print(f"[reanalysis] Creating matched flight at t={match_time:.3f} s (matching: {matched_params_str})...")
             if motor_overrides:
                 print(f"[reanalysis] applying motor overrides: {motor_overrides}")
             if parachute_overrides:
                 print(f"[reanalysis] applying parachute overrides: {parachute_overrides}")
             matched_flight = create_matched_flight(
                 nominal_flight,
-                project_path,
+                params,
                 match_time,
                 data=data,
                 parachute_overrides=parachute_overrides,
                 motor_overrides=motor_overrides,
+                match_parameters=match_parameters,
             )
             scenario_sets[0]["matched"] = matched_flight
         elif match_time is not None:
             print("[reanalysis] 'matched_flight' requested but 'cats_vega' not in sources, skipping matched flight.")
 
-        # Pre-compute GNSS 3D tracks so compare_trajectories can overlay them on the trajectory plot
-        gnss_3d_traces = compute_gnss_3d_traces(data, nominal_flight.env)
-        if gnss_3d_traces:
-            constants, variations = register("gnss_3d_traces", gnss_3d_traces, constants, variations)
+        gnss_3d_traces.update(compute_gnss_3d_traces(data, nominal_flight.env))
 
-    constants, variations = register("flight_computer_impacts", flight_computer_impacts, constants, variations)
-    constants, variations = register("reanalysis_flight_computer_data", flight_computer_data_by_env, constants, variations)
-    return constants, variations
+    if gnss_3d_traces:
+        params.runtime.gnss_3d_traces = gnss_3d_traces
+    params.runtime.flight_computer_impacts = flight_computer_impacts
+    params.runtime.reanalysis_flight_computer_data = flight_computer_data_by_env
 
 
-def run_reanalysis_comparison(constants, variations):
+def run_reanalysis_comparison(params: SimParams):
+    """Compare nominal (and matched, if built) simulated flights against onboard flight-computer data.
+
+    Should run AFTER build_reanalysis_artifacts (and AFTER outputs.run_notebook_display_mode).
     """
-    Compares nominal (and matched, if built) simulated flights per env against onboard flight-computer data.
-    Should run AFTER build_reanalysis_artifacts (and typically AFTER outputs.run_notebook_display_mode).
-    """
-    setup = _resolve_reanalysis_setup(constants, variations)
-    if setup is None:
-        return constants, variations
-    flights_by_env, reanalysis_envs, sources, project_path = setup
+    reanalysis_envs = _get_reanalysis_env_names(params)
+    if reanalysis_envs is None:
+        return
 
-    try:
-        flight_computer_data_by_env = lookup("reanalysis_flight_computer_data", constants, variations)[0]
-    except KeyError:
+    if params.runtime.reanalysis_flight_computer_data is None:
         raise RuntimeError("run_reanalysis_comparison requires build_reanalysis_artifacts to run first.")
 
+    flight_computer_data_by_env = params.runtime.reanalysis_flight_computer_data
     event_markers = None
 
-    rocket = lookup("rocket", constants, variations)[0]
-    motor = lookup("motor", constants, variations)[0]
-    rocket_config = {"total_length": lookup("rocket_length", constants, variations)[0]}
+    rocket = params.runtime.rocket
+    motor = params.runtime.motor
+    rocket_config = {"total_length": params.config.rocket.length / 1000}
 
     for env_name in reanalysis_envs:
-        scenario_sets = flights_by_env[env_name]
+        scenario_sets = params.runtime.flights_by_env[env_name]
         nominal_flight = scenario_sets[0]["nominal"]
         # The scenario_set stores the spliced flight (for per-flight plots/KML); the comparison plots want the
         # raw matched-only simulation so the divergence is visible as a separate trace starting at t_match.
@@ -1203,28 +1279,29 @@ def run_reanalysis_comparison(constants, variations):
         compare_altitude(nominal_flight, data, matched_flight=matched_flight)
         compare_gnss(nominal_flight, data, matched_flight=matched_flight)
 
-        if "cats_vega" in sources:
+        if "cats_vega" in params.config.reanalysis.sources:
             # Rail-exit time is still needed for the attitude-plot marker below;
             # the CATS-derived initial heading itself is registered in build_reanalysis_artifacts.
             cats_rail_exit_time = find_rail_exit_time(data["cats_vega"], nominal_flight.effective_1rl)
 
-            event_markers = cats_event_markers(project_path)
+            event_markers = cats_event_markers(params)
             custom_plots = CustomPlots(
-                flight_forecast=nominal_flight,
-                motor=motor,
-                plot_title="CATS Vega",
-                rocket=rocket,
-                rocket_config=rocket_config,
+                flight_forecast=[nominal_flight],
+                motor=[motor],
+                plot_title=["CATS Vega"],
+                rocket=[rocket],
+                rocket_config=[rocket_config],
+                save_dir=params.project_path / "plots",
             )
             attitude_markers = list(event_markers)
             if cats_rail_exit_time is not None:
                 attitude_markers.append((cats_rail_exit_time, "Out Of Rail", "red"))
-            plot_cats_attitude_angle(project_path, custom_plots, attitude_markers)
+            plot_cats_attitude_angle(params, custom_plots, attitude_markers)
 
-        compare_pressure(nominal_flight, data, matched_flight=matched_flight)
+        plot_vertical_motion_per_source(nominal_flight, data, motor, rocket, rocket_config, cats_markers=event_markers, matched_flight=matched_flight, save_dir=params.project_path / "plots")
+        compare_rail_exit_velocity(nominal_flight, data)
         compare_acceleration(nominal_flight, data, motor, matched_flight=matched_flight)
         compare_speed(nominal_flight, data, matched_flight=matched_flight)
-        plot_vertical_motion_per_source(nominal_flight, data, motor, rocket, rocket_config, cats_markers=event_markers)
-        compare_rail_exit_velocity(nominal_flight, data)
+        compare_pressure(nominal_flight, data, matched_flight=matched_flight)
 
-    return constants, variations
+

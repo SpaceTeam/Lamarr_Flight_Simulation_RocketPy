@@ -3,3 +3,11 @@ __pycache__
 *.png
 *.kml
 landing_positions.html
+*Zones.html
+*Angle_of_attack__attitude_angle__and_heading_over_time.html
+*Angular_velocity__RocketPy_body_reference_frame_.html
+*CG_CP_position__Mach__Stability__OpenRocket_CG_CP_orientation_.html
+*attitude_angle_from_horizontal___GNSS_heading.html
+*parachute_model_drogue.html
+*parachute_model_main.html
+*_Motion_over_time.html

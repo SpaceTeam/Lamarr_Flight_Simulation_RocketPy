@@ -1,7 +1,9 @@
+import math
+
 from rocketpy import Rocket, Flight, Parachute
 
 from simulation.utils import *
-
+from simulation.config_schema import SimParams, ParachuteConfig
 DEBUG = False
 
 
@@ -10,196 +12,148 @@ DEBUG = False
 # =============================================================================
 #
 # Payload flights are created automatically by the main simulation pipeline when
-# ``payload_mass_total`` is greater than zero.
+# payload.mass_total is greater than zero.
 
 
-def has_deployable_payload(constants, variations):
-    """
-    Return True when the loaded config declares a separated payload mass.
-    """
-    try:
-        payload_mass_total = lookup("payload_mass_total", constants, variations)[0]
-    except KeyError:
-        return False
-
-    payload_masses = ensure_list(payload_mass_total)
-    return any(payload_mass > 0 for payload_mass in payload_masses)
+def has_deployable_payload(params: SimParams):
+    """Return True when the loaded config declares a separated payload mass."""
+    mass_total = params.config.payload.mass_total
+    if isinstance(mass_total, list):
+        return any(m > 0 for m in mass_total)
+    return mass_total > 0
 
 
-def collect_nominal_ascent_flights(constants, variations):
-    """
-    Return full-mass ascent flights for payload deployment, falling back to nominal scenario flights.
-    """
-    try:
-        ascent_flights_by_env = lookup("ascent_flights_by_env", constants, variations)[0]
-    except KeyError:
-        ascent_flights_by_env = None
-
-    if ascent_flights_by_env is not None:
+def _collect_nominal_ascent_flights(params: SimParams):
+    """Return the full-mass ascent-only flights (or nominal scenario flights as fallback) for payload deployment."""
+    if params.runtime.ascent_flights_by_env is not None:
         # Payload deployment uses the full-mass ascent that stops at apogee.
         return [
-            ascent_flight
-            for ascent_flights in ascent_flights_by_env.values()
-            for ascent_flight in ensure_list(ascent_flights)
+            flight
+            for flights in params.runtime.ascent_flights_by_env.values()
+            for flight in ensure_list(flights)
         ]
 
-    try:
-        flights_by_env = lookup("flights_by_env", constants, variations)[0]
-    except KeyError:
-        return []
+    if params.runtime.flights_by_env is not None:
+        # Without separate ascent flights, fall back to the nominal scenario flight.
+        return [
+            scenario_set["nominal"]
+            for scenario_sets in params.runtime.flights_by_env.values()
+            for scenario_set in scenario_sets
+        ]
 
-    # Without separate ascent flights, fall back to the nominal scenario flight.
-    return [
-        scenario_set["nominal"]
-        for scenario_sets in flights_by_env.values()
-        for scenario_set in scenario_sets
-    ]
+    return []
 
 
-def create_payload_parachute(constants, variations):
-    """
-    Create the parachute used by the separated payload.
-    """
-    print("Creating payload parachute...")
-    parameter_payload_parachute = []
+def _get_parachute_cd_s(payload_cfg: ParachuteConfig):
+    """Compute cd_s from a ParachuteConfig: directly, or from cd + radius/fabric_area."""
+    if payload_cfg.cd_s is not None:
+        return payload_cfg.cd_s
+    if payload_cfg.cd is not None and payload_cfg.fabric_area is not None:
+        return payload_cfg.cd * payload_cfg.fabric_area
+    if payload_cfg.cd is not None and payload_cfg.radius is not None:
+        return payload_cfg.cd * math.pi * payload_cfg.radius ** 2
+    raise ValueError("Payload parachute needs either cd_s, cd + radius, or cd + fabric_area in config.")
 
-    required = [
-        "cd_s",
-        "trigger",
-        "sampling_rate",
-    ]
+
+def create_payload(params: SimParams):
+    """Create the payload parachute and payload Rocket; store in params.runtime.payload."""
+    print("Creating payload...")
+
+    payload_cfg = params.config.parachutes.payload
+    if payload_cfg is None:
+        raise ValueError("parachutes.payload config is required for deployable payload simulation.")
+
+    pl = params.config.payload
+    required = {"mass", "diameter", "length"}
+    missing = [f for f in required if getattr(pl, f, None) is None]
+    if missing:
+        raise ValueError(f"payload config is missing required fields: {sorted(missing)}")
 
     # defaults = {
     #     "sampling_rate": 100,        # hz              # preset
     #     "lag": 1,                    # s               # measured
     # }
     
-    fill_parameters(parameter_payload_parachute, "parachutes_payload_", constants, variations)
-    check_required(parameter_payload_parachute, required, "parachutes_payload")
-    # add_defaults(parameter_payload_parachute, defaults, constants, variations, "parachute_payload")
-    if DEBUG:
-        print(parameter_payload_parachute)
+    options = {
+        "name": "payload",
+        "cd_s": _get_parachute_cd_s(payload_cfg),
+        "trigger": payload_cfg.trigger,
+        "sampling_rate": payload_cfg.sampling_rate,
+    }
+    if payload_cfg.lag is not None:
+        options["lag"] = payload_cfg.lag
+    if payload_cfg.noise is not None:
+        options["noise"] = payload_cfg.noise
+    if payload_cfg.radius is not None:
+        options["radius"] = payload_cfg.radius
+    if payload_cfg.cd is not None:
+        options["drag_coefficient"] = payload_cfg.cd
+    parachute = Parachute(**options)
 
-    payload_parachutes = []
+    set_labels(parachute)
 
-    for parachute_vals in generate_combinations(parameter_payload_parachute, constants, variations):
-        parachute_list = {}
-        parachute_options = {
-            "name": "payload",
-            "cd_s": parachute_vals["parachutes_payload_cd_s"],
-            "trigger": parachute_vals["parachutes_payload_trigger"],
-            "sampling_rate": parachute_vals["parachutes_payload_sampling_rate"],
-        }
-
-        if "parachutes_payload_lag" in parachute_vals:
-            parachute_options["lag"] = parachute_vals["parachutes_payload_lag"]
-
-        if "parachutes_payload_noise" in parachute_vals:
-            parachute_options["noise"] = parachute_vals["parachutes_payload_noise"]
-
-        parachute_list[0] = Parachute(**parachute_options)
-        attach_meta(parachute_list[0], {
-            k: parachute_vals[k]
-            for k in variations
-            if k in parachute_vals
-        })
-        payload_parachutes.append(parachute_list)
-    return register("payload_parachute", payload_parachutes, constants, variations)
-
-
-def create_payload(constants, variations):
-    """
-    Create the deployed-payload "rocket".
-    """
-    print("Creating payload...")
-    project = constants["project"]
-    constants, variations = create_payload_parachute(constants, variations)
-    parameter_payload = []
-
-    required = [
-        "diameter",
-        "mass",
-        "length"
-    ]
-    
     # defaults={
     #     "payload_moment_of_intertia_XY":0.01,
     #     "payload_moment_of_intertia_Z":0.01
     # }
-    fill_parameters(parameter_payload, "payload_", constants, variations)
-    check_required(parameter_payload, required, "payload")
-    # add_defaults(parameter_payload, defaults, constants, variations)
+    
+    inertia_xy = pl.moment_of_intertia_XY
+    inertia_z = pl.moment_of_intertia_Z
+
+    power_off_drag = get_project_file(params, params.config.rocket.power_off_drag)
+
+    payload_rocket = Rocket(
+        radius=pl.diameter / 2 / 1000,
+        mass=pl.mass / 1000,
+        inertia=(inertia_xy, inertia_xy, inertia_z),
+        power_off_drag=power_off_drag,
+        power_on_drag=power_off_drag,
+        center_of_mass_without_motor=pl.length / 2 / 1000,
+        coordinate_system_orientation="tail_to_nose",
+    )
+    payload_rocket.parachutes = [parachute]
+    set_labels(payload_rocket)
+
+    params.runtime.payload = payload_rocket
+    params.runtime.payload_parachute = {0: parachute}
 
     if DEBUG:
-        print(parameter_payload)
-
-    payloads = []
-
-    for payload_vals in generate_combinations(parameter_payload, constants, variations):
-        payload = {}
-        payload["nominal"] = Rocket(
-            radius=payload_vals["payload_diameter"] / 2 / 1000,
-            mass=payload_vals["payload_mass"] / 1000,
-            inertia=(payload_vals["payload_moment_of_intertia_XY"], payload_vals["payload_moment_of_intertia_XY"], payload_vals["payload_moment_of_intertia_Z"]),
-            power_off_drag="./" + project + "/power_off_drag.csv",
-            power_on_drag="./" + project + "/power_off_drag.csv",
-            center_of_mass_without_motor=payload_vals["payload_length"] / 2 / 1000,
-            coordinate_system_orientation="tail_to_nose"
-        )
-
-        payload["nominal"].parachutes = list(payload_vals["payload_parachute"].values())
-
-        attach_meta(payload["nominal"], {
-            k: payload_vals[k]
-            for k in variations
-            if k in payload_vals
-        })
-
-        payloads.append(payload)
-    return register("payload", payloads, constants, variations)
+        print(f"Payload rocket: radius={pl.diameter/2/1000:.4f} m, mass={pl.mass/1000:.3f} kg")
 
 
-def create_payload_flight(constants, variations):
-    """
-    Simulate the separated payload from the apogee of each nominal ascent flight.
-    """
+def create_payload_flight(params: SimParams):
+    """Simulate the separated payload from the apogee of each nominal ascent flight."""
     print("Creating payload flight...")
 
-    payloads = ensure_list(lookup("payload", constants, variations)[0])
-    nominal_ascent_flights = collect_nominal_ascent_flights(constants, variations)
+    payload_rocket = params.runtime.payload
+    if payload_rocket is None:
+        raise ValueError("No payload has been created yet. Call create_payload first.")
 
+    nominal_ascent_flights = _collect_nominal_ascent_flights(params)
     if not nominal_ascent_flights:
         raise ValueError("No nominal ascent flights are available for payload deployment.")
 
     flights_payload = []
-    total = len(payloads) * len(nominal_ascent_flights)
-    step = max(1, total // 10)
+    total = len(nominal_ascent_flights)
+
     print(total)
-    i = 0
 
-    for payload in payloads:
-        for nominal_flight in nominal_ascent_flights:
-            i += 1
+    for i, nominal_flight in enumerate(nominal_ascent_flights, start=1):
+        print(f"{i / total:.0%}")
+        initial_solution = [nominal_flight.apogee_time, *nominal_flight.apogee_state]
 
-            # Start the separated payload at the nominal rocket apogee instead of at impact.
-            initial_solution = [nominal_flight.apogee_time, *nominal_flight.apogee_state]
+        flight_payload = Flight(
+            rocket=payload_rocket,
+            environment=nominal_flight.env,
+            rail_length=nominal_flight.rail_length,
+            inclination=nominal_flight.inclination,
+            heading=nominal_flight.heading,
+            terminate_on_apogee=False,
+            initial_solution=initial_solution,
+            name="Payload",
+        )
+        set_labels(flight_payload)
+        flights_payload.append(flight_payload)
 
-            flight_payload = Flight(
-                rocket=payload["nominal"],
-                environment=nominal_flight.env,
-                rail_length=nominal_flight.rail_length,
-                inclination=nominal_flight.inclination,
-                heading=nominal_flight.heading,
-                terminate_on_apogee=False,
-                initial_solution=initial_solution,
-                name="Payload",
-            )
 
-            attach_meta(flight_payload, {})
-            flights_payload.append(flight_payload)
-
-            if i % step == 0 or i == total:
-                print(f"{i / total:.0%}")
-
-    constants, variations = register("flight_payload", flights_payload, constants, variations)
-    return constants, variations
+    params.runtime.flight_payload = flights_payload
