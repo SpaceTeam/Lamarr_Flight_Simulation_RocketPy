@@ -997,10 +997,11 @@ def compare_speed(flight, data, matched_flight=None):
     Function.compare_plots(traces, title="Speed Comparison", xlabel="Time (s)", ylabel="Speed (m/s)")
 
 
-def plot_cats_attitude_angle(params: SimParams, custom_plots: CustomPlots, event_markers):
+def plot_cats_attitude_and_heading_angle(params: SimParams, custom_plots: CustomPlots, event_markers):
     """
-    Plot the CATS Vega attitude angle from vertical over time.
+    Plot the CATS Vega attitude and heading angle from vertical over time.
     """
+    # TODO: check if this function is 100% correct 
     orientation_file_path = params.project_path / CATS_FOLDER / "orientationInfo.csv"
     
     # -------------------------------------------------------------------------
@@ -1071,7 +1072,7 @@ def plot_cats_attitude_angle(params: SimParams, custom_plots: CustomPlots, event
             "event_markers": event_markers,
         }],
         yaxis_title="Attitude angle from horizontal [°]",
-        yaxis2_title="Heading (compass, °)",
+        yaxis2_title="Heading (°)",
         width=1100,
         height=500,
     )
@@ -1306,7 +1307,7 @@ def run_reanalysis_comparison(params: SimParams):
             attitude_markers = list(event_markers)
             if cats_rail_exit_time is not None:
                 attitude_markers.append((cats_rail_exit_time, "Out Of Rail", "red"))
-            plot_cats_attitude_angle(params, custom_plots, attitude_markers)
+            plot_cats_attitude_and_heading_angle(params, custom_plots, attitude_markers)
 
         plot_motion_per_source(
             nominal_flight,
