@@ -1,7 +1,8 @@
 .cache.sqlite
 __pycache__
 *.png
-*.kml
+*flight*.kml
+*trajectory*.kml
 landing_positions.html
 *Zones.html
 *Angle_of_attack__attitude_angle__and_heading_over_time.html
