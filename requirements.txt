@@ -1,0 +1,35 @@
+# Install with: pip install -r requirements.txt
+# use one venv per project. only change the rocketpy version per project.
+
+# Simulation
+rocketpy==1.12.1
+CoolProp
+pydantic
+tomlkit
+pyproj
+pymap3d
+tabulate
+
+# Weather data
+openmeteo-requests
+requests-cache
+retry-requests
+niquests==3.18.8
+urllib3-future==2.20.904
+
+# Data and plotting
+pandas
+plotly
+colorama
+
+# Notebooks
+nbformat
+nbconvert
+ipykernel
+nbstripout
+
+# Web app (streamlit_app/)
+streamlit==1.64.0
+
+# Git hooks (run "pre-commit install" once per clone)
+pre-commit
