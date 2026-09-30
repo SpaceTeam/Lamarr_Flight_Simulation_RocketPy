@@ -1,0 +1,107 @@
+#:schema ../../simulation_core/config_schemas/config.schema.json
+# Hover a key for its meaning and optional unit (Tombi); TOML syntax and variations: see Documentation.md.
+project = "ALBATROSS"
+output_level = 2
+
+[environment]
+# date = "tomorrow_08_local"
+date = 2026-05-23T13:12:00
+# date = 2026-09-30T00:00:00.000
+latitude = 48.8038043
+longitude = 12.5487077
+max_expected_height = 700
+elevation = 355.45
+timezone = "Europe/Berlin"
+# envType = ["Windy", "custom_atmosphere"]
+envType = ["reanalysis_custom"]
+# windy_weather_models = ["ICONEU"]
+# custom_weather_models = ["icon_d2", "icon_eu"]
+reanalysis_csv = { icon_d2 = "rocketpy_atmosphere_icon_d2_reanalysis.csv" }
+
+[engine]
+type = "solid"
+
+# K700W values are from https://www.thrustcurve.org/motors/AeroTech/K700W/.
+[motor]
+name = "K700W"
+total_mass = 2035
+propellant_mass = 1303
+diameter = 54
+length = 568
+burn_time = 3.5
+center_of_dry_mass_factor = 0.4
+thrust = "AeroTech_K700W.eng"
+
+[rocket]
+total_mass_without_motor = 17887                        # weighed
+length = 3755                                           # measured
+total_CG_without_motor_from_tip = 1818.79               # measured
+diameter = 133                                          # measured
+moment_of_intertia_Z = 0.037801                         # calculated
+moment_of_intertia_XY = 21.82274                        # calculated
+power_off_drag = "power_off_drag.csv"
+power_on_drag = "power_on_drag.csv"
+
+[nosecone]
+length = 659                                            # measured; 585 (nosecone) + 74 (nosetip) = 659
+cylindrical_section_length = 81                         # Onshape
+kind = "lvhaack"
+
+[railbuttons]
+upper_from_tip = 1738
+lower_from_tip = 3431
+
+[tailcone]
+bottom_radius = 53.35                                   # measured
+cylindrical_section_length = 35                         # Onshape
+length = 280                                            # measured
+
+[fins]
+amount = 4
+position = 239.36126                                    # Onshape
+name = "Freeform"
+# measured: [0,0] root leading edge; [0.1928,0.0977] up; [0.248,0.0977] straight; [0.248,-0.0123] down
+shape_points = [[0, 0], [0.1928, 0.0977], [0.248, 0.0977], [0.248, -0.0123]]
+
+# TODO: need projected area of parachute
+[parachutes.main]
+cd = 1.8
+radius = 1.05                                           # 2.1 m / 2
+trigger = 250
+sampling_rate = 100                                     # default value
+lag = 5                                                 # measured
+
+[parachutes.drogue]
+cd = 0.55
+radius = 0.4415481                                      # for a circle with area fabric_area (projected area is almost the fabric area)
+fabric_area = 0.6125                                    # 0.35^2 * 5
+trigger = "apogee"
+sampling_rate = 100
+lag = 1
+
+[flight]
+rail_length = 7
+# inclination = "84..88:2"
+inclination = 88
+# heading = "340..360:10"
+heading = 350
+
+[payload]
+mass_total = 0
+
+[reanalysis]
+sources = ["cats_vega"]
+
+[reanalysis.matched_flight]
+match_time = 1.6
+match_parameters = ["heading", "inclination", "velocity"]
+
+[reanalysis.matched_flight.motor]
+burn_time = 3                                       # burn time as marked by CATS Vega
+
+[reanalysis.matched_flight.parachutes.main]
+enabled = false
+
+# RocketPy does not simulate drag for body tube. Use fake drogue for it.
+[reanalysis.matched_flight.parachutes.drogue]
+cd_s = 0.1

@@ -1,0 +1,2983 @@
+{
+  "$defs": {
+    "EngineConfig": {
+      "additionalProperties": false,
+      "description": "Motor propulsion type selection.",
+      "properties": {
+        "type": {
+          "description": "'solid' (uses the [motor] section) or 'liquid' (uses the [liquid_engine] section).",
+          "enum": [
+            "solid",
+            "liquid"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "EngineConfig",
+      "type": "object"
+    },
+    "EnvironmentConfig": {
+      "additionalProperties": false,
+      "description": "Launch site environment and atmosphere model configuration.",
+      "properties": {
+        "date": {
+          "anyOf": [
+            {
+              "const": "tomorrow_08_local",
+              "type": "string"
+            },
+            {
+              "format": "date-time-local",
+              "type": "string"
+            }
+          ],
+          "description": "Launch date and time in launch-site time, e.g. 2026-05-23T13:12:00. Or the magic string 'tomorrow_08_local' \nfor tomorrow at 08:00.",
+          "title": "Date"
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Launch site latitude [°].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Latitude"
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Launch site longitude [°].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Longitude"
+        },
+        "max_expected_height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Maximum expected height above ground level [m AGL].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Max Expected Height"
+        },
+        "elevation": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Launch site elevation above sea level [m ASL].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Elevation"
+        },
+        "timezone": {
+          "description": "IANA timezone of the launch site. Applied to `date`.",
+          "examples": [
+            "Europe/Berlin"
+          ],
+          "title": "Timezone",
+          "type": "string"
+        },
+        "envType": {
+          "anyOf": [
+            {
+              "enum": [
+                "standard_atmosphere",
+                "Windy",
+                "custom_atmosphere",
+                "reanalysis",
+                "reanalysis_custom"
+              ],
+              "type": "string"
+            },
+            {
+              "items": {
+                "enum": [
+                  "standard_atmosphere",
+                  "Windy",
+                  "custom_atmosphere",
+                  "reanalysis",
+                  "reanalysis_custom"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "description": "Atmosphere model(s); a list simulates several environments. Supported values:\n- `standard_atmosphere`: RocketPy standard atmosphere.\n- `Windy`: RocketPy Windy forecast. Requires `windy_weather_models`.\n- `custom_atmosphere`: CSV files generated by the weather export script. Requires `custom_weather_models`.\n- `reanalysis`: RocketPy reanalysis file. Requires `reanalysis_file` and `reanalysis_dictionary`.\n- `reanalysis_custom`: existing historical CSV files. Requires `reanalysis_csv`.\n\n`reanalysis` and `reanalysis_custom` must be the only entry in the list.",
+          "title": "Envtype"
+        },
+        "reanalysis_csv": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object",
+              "examples": [
+                {
+                  "icon_d2": "rocketpy_atmosphere_icon_d2_reanalysis.csv"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CSV filenames in the project folder keyed by weather model name, used with 'reanalysis_custom'.",
+          "examples": [
+            {
+              "icon_d2": "rocketpy_atmosphere_icon_d2_reanalysis.csv"
+            }
+          ],
+          "title": "Reanalysis Csv"
+        },
+        "windy_weather_models": {
+          "anyOf": [
+            {
+              "enum": [
+                "ECMWF",
+                "GFS",
+                "ICON",
+                "ICONEU"
+              ],
+              "type": "string"
+            },
+            {
+              "items": {
+                "enum": [
+                  "ECMWF",
+                  "GFS",
+                  "ICON",
+                  "ICONEU"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Windy weather model(s), used with 'Windy'.",
+          "title": "Windy Weather Models"
+        },
+        "custom_weather_models": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string",
+                "examples": [
+                  "icon_d2",
+                  "icon_eu"
+                ]
+              },
+              "type": "array",
+              "examples": [
+                [
+                  "icon_d2",
+                  "icon_eu"
+                ]
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Custom weather model name(s), used with 'custom_atmosphere'.",
+          "examples": [
+            [
+              "icon_d2",
+              "icon_eu"
+            ]
+          ],
+          "title": "Custom Weather Models"
+        },
+        "reanalysis_file": {
+          "anyOf": [
+            {
+              "type": "string",
+              "examples": [
+                "cansat_weather.nc"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reanalysis data file in the project folder, used with 'reanalysis'.",
+          "examples": [
+            "cansat_weather.nc"
+          ],
+          "title": "Reanalysis File"
+        },
+        "reanalysis_dictionary": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "RocketPy reanalysis dictionary, used with 'reanalysis'.",
+          "examples": [
+            "ECMWF"
+          ],
+          "title": "Reanalysis Dictionary"
+        }
+      },
+      "required": [
+        "date",
+        "latitude",
+        "longitude",
+        "max_expected_height",
+        "elevation",
+        "timezone",
+        "envType"
+      ],
+      "title": "EnvironmentConfig",
+      "type": "object"
+    },
+    "FinsConfig": {
+      "additionalProperties": false,
+      "description": "Fin set geometry. Uses freeform fins if shape_points is given, otherwise trapezoidal fins.",
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Number of fins.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Amount"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Distance of fins coming out of rocket to rear end of rocket [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Position"
+        },
+        "name": {
+          "description": "Fin set name.",
+          "examples": [
+            "Freeform"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "shape_points": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Freeform fin outline as [x, y] points in meters [m]. [0, 0] is the root leading edge; \nthe polygon is closed automatically.",
+          "title": "Shape Points"
+        },
+        "root_chord": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Root chord length for trapezoidal fins [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Root Chord"
+        },
+        "tip_chord": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tip chord length for trapezoidal fins [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Tip Chord"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Fin span for trapezoidal fins [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Span"
+        },
+        "sweep_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sweep length for trapezoidal fins [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Sweep Length"
+        }
+      },
+      "required": [
+        "amount",
+        "position",
+        "name"
+      ],
+      "title": "FinsConfig",
+      "type": "object"
+    },
+    "FlightConfig": {
+      "additionalProperties": false,
+      "description": "Launch rail configuration and variation parameters.",
+      "properties": {
+        "rail_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Launch rail length [m].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Rail Length"
+        },
+        "inclination": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "examples": [
+                88
+              ]
+            },
+            {
+              "type": "number",
+              "examples": [
+                88
+              ]
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "examples": [
+                      84,
+                      86,
+                      88
+                    ]
+                  },
+                  {
+                    "type": "number",
+                    "examples": [
+                      84,
+                      86,
+                      88
+                    ]
+                  }
+                ]
+              },
+              "type": "array",
+              "examples": [
+                [
+                  84,
+                  86,
+                  88
+                ]
+              ]
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string",
+              "examples": [
+                "84..88:2"
+              ]
+            }
+          ],
+          "description": "Launch rail inclination [°]. 0 = horizontal, 90 = vertical.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "examples": [
+            88,
+            [
+              84,
+              86,
+              88
+            ],
+            "84..88:2"
+          ],
+          "title": "Inclination"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "examples": [
+                350
+              ]
+            },
+            {
+              "type": "number",
+              "examples": [
+                350
+              ]
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "examples": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ]
+                  },
+                  {
+                    "type": "number",
+                    "examples": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ]
+                  }
+                ]
+              },
+              "type": "array",
+              "examples": [
+                [
+                  0,
+                  90,
+                  180,
+                  270
+                ]
+              ]
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string",
+              "examples": [
+                "340..360:10",
+                "350..10:5"
+              ]
+            }
+          ],
+          "description": "Launch rail heading [°]. 0 = north, 90 = east. In a range string, start > stop wraps around 360°.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "examples": [
+            350,
+            [
+              0,
+              90,
+              180,
+              270
+            ],
+            "340..360:10",
+            "350..10:5"
+          ],
+          "title": "Heading"
+        }
+      },
+      "required": [
+        "rail_length",
+        "inclination",
+        "heading"
+      ],
+      "title": "FlightConfig",
+      "type": "object"
+    },
+    "LiquidEngineConfig": {
+      "additionalProperties": false,
+      "description": "Liquid bipropellant motor configuration (pressure-fed, propellant-agnostic). Required when engine.type is 'liquid'.",
+      "properties": {
+        "holddown_time": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Time the rocket is held down after ignition before release [s].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Holddown Time"
+        },
+        "nozzle_diameter": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Nozzle exit diameter [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Nozzle Diameter"
+        },
+        "nozzle_position": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "examples": [
+                -40
+              ]
+            },
+            {
+              "type": "number",
+              "examples": [
+                -40
+              ]
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "default": 0.0,
+          "description": "Nozzle exit position relative to the rocket's rear end [mm]. None = nozzle ends with bodytube; \nNegative = nozzle sticks out below the bodytube. For a solid motor this moves the whole motor.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "examples": [
+            -40
+          ],
+          "title": "Nozzle Position"
+        },
+        "thrust": {
+          "description": "Thrust curve filename in the project folder (.eng, .rse, or .csv).",
+          "examples": [
+            "thrust.csv"
+          ],
+          "title": "Thrust",
+          "type": "string"
+        },
+        "pressure_gas_tank": {
+          "$ref": "#/$defs/PressureGasTankConfig",
+          "description": "Pressurant gas tank configuration."
+        },
+        "fuel_tank": {
+          "$ref": "#/$defs/LiquidTankConfig",
+          "description": "Fuel tank configuration."
+        },
+        "oxidizer_tank": {
+          "$ref": "#/$defs/LiquidTankConfig",
+          "description": "Oxidizer tank configuration."
+        }
+      },
+      "required": [
+        "holddown_time",
+        "nozzle_diameter",
+        "thrust",
+        "pressure_gas_tank",
+        "fuel_tank",
+        "oxidizer_tank"
+      ],
+      "title": "LiquidEngineConfig",
+      "type": "object"
+    },
+    "LiquidTankConfig": {
+      "additionalProperties": false,
+      "description": "Propellant (fuel or oxidizer) tank geometry, flow rate, and fluid properties.",
+      "properties": {
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Tank length [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Length"
+        },
+        "outer_diameter": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Tank outer diameter [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Outer Diameter"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Propellant volume [L].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Volume"
+        },
+        "massflow": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Propellant mass flow rate [kg/s].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Massflow"
+        },
+        "center_from_tip": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Distance of the tank's middle point to the nose tip [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Center From Tip"
+        },
+        "substance": {
+          "description": "CoolProp fluid name for this propellant.",
+          "examples": [
+            "ethanol",
+            "oxygen"
+          ],
+          "title": "Substance",
+          "type": "string"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Propellant temperature [K].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Temperature"
+        },
+        "pressure": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Tank pressure [Pa].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Pressure"
+        }
+      },
+      "required": [
+        "length",
+        "outer_diameter",
+        "volume",
+        "massflow",
+        "center_from_tip",
+        "substance",
+        "temperature",
+        "pressure"
+      ],
+      "title": "LiquidTankConfig",
+      "type": "object"
+    },
+    "MatchedFlightConfig": {
+      "additionalProperties": false,
+      "description": "A flight that branches off the nominal at match_time with a sensor-matched initial state.",
+      "properties": {
+        "match_time": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Time [s] at which to branch off the nominal flight and apply the sensor-matched state.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Match Time"
+        },
+        "match_parameters": {
+          "description": "Flight-computer parameters to match at match_time.",
+          "items": {
+            "enum": [
+              "heading",
+              "inclination",
+              "velocity"
+            ],
+            "type": "string"
+          },
+          "title": "Match Parameters",
+          "type": "array"
+        },
+        "motor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotorOverrideConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Motor overrides applied to the matched flight."
+        },
+        "parachutes": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/ParachuteOverrideConfig"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-parachute overrides keyed by parachute name, e.g. [reanalysis.matched_flight.parachutes.main].",
+          "title": "Parachutes"
+        }
+      },
+      "title": "MatchedFlightConfig",
+      "type": "object"
+    },
+    "MotorConfig": {
+      "additionalProperties": false,
+      "description": "Solid motor physical properties and thrust curve. Required when engine.type is 'solid'.",
+      "properties": {
+        "name": {
+          "description": "Motor name.",
+          "examples": [
+            "K700W"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "total_mass": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Total (wet) motor mass [g].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Total Mass"
+        },
+        "propellant_mass": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Propellant mass [g].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Propellant Mass"
+        },
+        "diameter": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Motor casing diameter [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Diameter"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Motor casing length [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Length"
+        },
+        "burn_time": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Nominal burn time [s].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Burn Time"
+        },
+        "center_of_dry_mass_factor": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Fraction of the motor length (0-1) used to place the dry CG, measured from the nozzle.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Center Of Dry Mass Factor"
+        },
+        "thrust": {
+          "description": "Thrust curve filename in the project folder (.eng, .rse, or .csv).",
+          "examples": [
+            "AeroTech_K700W.eng"
+          ],
+          "title": "Thrust",
+          "type": "string"
+        },
+        "nozzle_position": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "examples": [
+                -40
+              ]
+            },
+            {
+              "type": "number",
+              "examples": [
+                -40
+              ]
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "default": 0.0,
+          "description": "Nozzle exit position relative to the rocket's rear end [mm]. None = nozzle ends with bodytube; \nNegative = nozzle sticks out below the bodytube. For a solid motor this moves the whole motor.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "examples": [
+            -40
+          ],
+          "title": "Nozzle Position"
+        }
+      },
+      "required": [
+        "name",
+        "total_mass",
+        "propellant_mass",
+        "diameter",
+        "length",
+        "burn_time",
+        "center_of_dry_mass_factor",
+        "thrust"
+      ],
+      "title": "MotorConfig",
+      "type": "object"
+    },
+    "MotorOverrideConfig": {
+      "additionalProperties": false,
+      "description": "Per-parameter motor overrides for the matched flight.",
+      "properties": {
+        "burn_time": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Override burn time [s].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Burn Time"
+        },
+        "thrust": {
+          "anyOf": [
+            {
+              "type": "string",
+              "examples": [
+                "AeroTech_K700W.eng"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Override thrust curve filename in the project folder.",
+          "examples": [
+            "AeroTech_K700W.eng"
+          ],
+          "title": "Thrust"
+        }
+      },
+      "title": "MotorOverrideConfig",
+      "type": "object"
+    },
+    "NoseconeConfig": {
+      "additionalProperties": false,
+      "description": "Nosecone geometry.",
+      "properties": {
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Total nosecone length including the cylindrical section [mm], e.g. nosecone (585) + nosetip (74) = 659.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Length"
+        },
+        "cylindrical_section_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Cylindrical section length at the base of the nosecone [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Cylindrical Section Length"
+        },
+        "kind": {
+          "description": "RocketPy nosecone shape.",
+          "enum": [
+            "conical",
+            "ogive",
+            "tangent",
+            "lvhaack",
+            "vonkarman",
+            "elliptical",
+            "parabolic"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "length",
+        "cylindrical_section_length",
+        "kind"
+      ],
+      "title": "NoseconeConfig",
+      "type": "object"
+    },
+    "ParachuteConfig": {
+      "additionalProperties": false,
+      "description": "Single parachute. Give cd_s directly, or cd together with radius or fabric_area.",
+      "properties": {
+        "trigger": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "const": "apogee",
+              "type": "string"
+            }
+          ],
+          "description": "Deployment trigger: altitude above ground [m], or 'apogee'.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Trigger"
+        },
+        "sampling_rate": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Parachute sensor sampling rate [Hz].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Sampling Rate"
+        },
+        "cd_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Drag area (cd × projected area) [m²]. Provide this, or cd + (radius or fabric_area).\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Cd S"
+        },
+        "cd": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Drag coefficient. Combine with radius or fabric_area to derive cd_s.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Cd"
+        },
+        "radius": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Projected parachute radius [m]. Used with cd to compute cd_s.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Radius"
+        },
+        "fabric_area": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Parachute fabric area [m²]. Used with cd to compute cd_s when the projected area is close to the fabric area.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Fabric Area"
+        },
+        "lag": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Deployment lag after trigger [s].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Lag"
+        },
+        "noise": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pressure sensor noise model as [mean [Pa], std_dev [Pa], time_correlation].",
+          "title": "Noise"
+        }
+      },
+      "required": [
+        "trigger",
+        "sampling_rate"
+      ],
+      "title": "ParachuteConfig",
+      "type": "object"
+    },
+    "ParachuteOverrideConfig": {
+      "additionalProperties": false,
+      "description": "Per-parameter parachute overrides for the matched flight.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Set to false to remove this parachute from the matched flight entirely.",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "cd_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Override drag area (cd × projected area) [m²].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Cd S"
+        },
+        "cd": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Override drag coefficient.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Cd"
+        },
+        "radius": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Override projected radius [m].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Radius"
+        },
+        "fabric_area": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Override fabric area [m²].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Fabric Area"
+        }
+      },
+      "title": "ParachuteOverrideConfig",
+      "type": "object"
+    },
+    "ParachutesConfig": {
+      "additionalProperties": false,
+      "description": "All parachutes on the rocket.",
+      "properties": {
+        "main": {
+          "$ref": "#/$defs/ParachuteConfig",
+          "description": "Main (recovery) parachute."
+        },
+        "drogue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParachuteConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Drogue parachute, usually deployed at apogee. Leave out if there is none."
+        },
+        "payload": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParachuteConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Parachute of the separating payload. Leave out if there is none."
+        }
+      },
+      "required": [
+        "main"
+      ],
+      "title": "ParachutesConfig",
+      "type": "object"
+    },
+    "PayloadConfig": {
+      "additionalProperties": false,
+      "description": "Deployable payload configuration. Only active when mass_total > 0.",
+      "properties": {
+        "mass_total": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "default": 0.0,
+          "description": "Total deployable payload mass [g]. 0 = no payload separates.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Mass Total"
+        },
+        "mass": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Mass of the separated payload body [g]. Required when mass_total > 0.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Mass"
+        },
+        "diameter": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Payload body diameter [mm]. Required when mass_total > 0.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Diameter"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Payload total length [mm]. Required when mass_total > 0.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Length"
+        },
+        "moment_of_intertia_XY": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Payload moment of inertia about the pitch/yaw axes [kg·m²]. Required when mass_total > 0.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Moment Of Intertia Xy"
+        },
+        "moment_of_intertia_Z": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Payload moment of inertia about the roll axis [kg·m²]. Required when mass_total > 0.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Moment Of Intertia Z"
+        }
+      },
+      "title": "PayloadConfig",
+      "type": "object"
+    },
+    "PressureGasTankConfig": {
+      "additionalProperties": false,
+      "description": "Pressurant gas tank. Feeds both the fuel and oxidizer tanks from separate positions.",
+      "properties": {
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Tank length [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Length"
+        },
+        "outer_diameter": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Tank outer diameter [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Outer Diameter"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Gas volume [L].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Volume"
+        },
+        "massflow": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Pressurant mass flow rate [kg/s].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Massflow"
+        },
+        "fuel_center_from_tip": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Distance of the tank's middle point to the nose tip [mm]. This is the pressurant tank on the fuel side.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Fuel Center From Tip"
+        },
+        "oxidizer_center_from_tip": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Distance of the tank's middle point to the nose tip [mm]. This is the pressurant tank on the oxidizer side.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Oxidizer Center From Tip"
+        },
+        "substance": {
+          "description": "CoolProp fluid name for the pressurant.",
+          "examples": [
+            "N2"
+          ],
+          "title": "Substance",
+          "type": "string"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Gas temperature [K].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Temperature"
+        },
+        "pressure": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Tank pressure [Pa].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Pressure"
+        }
+      },
+      "required": [
+        "length",
+        "outer_diameter",
+        "volume",
+        "massflow",
+        "fuel_center_from_tip",
+        "oxidizer_center_from_tip",
+        "substance",
+        "temperature",
+        "pressure"
+      ],
+      "title": "PressureGasTankConfig",
+      "type": "object"
+    },
+    "RailbuttonsConfig": {
+      "additionalProperties": false,
+      "description": "Rail button positions measured from the rocket tip.",
+      "properties": {
+        "upper_from_tip": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Upper rail button position, measured FROM THE NOSE TIP [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Upper From Tip"
+        },
+        "lower_from_tip": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Lower rail button position, measured FROM THE NOSE TIP [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Lower From Tip"
+        }
+      },
+      "required": [
+        "upper_from_tip",
+        "lower_from_tip"
+      ],
+      "title": "RailbuttonsConfig",
+      "type": "object"
+    },
+    "ReanalysisConfig": {
+      "additionalProperties": false,
+      "description": "Flight-computer data sources and matched-flight configuration for reanalysis mode.",
+      "properties": {
+        "sources": {
+          "description": "Flight computers to load data from.",
+          "items": {
+            "enum": [
+              "cats_vega",
+              "altimax",
+              "rcu"
+            ],
+            "type": "string"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "matched_flight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MatchedFlightConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sensor-matched flight branch. Leave out to skip the matched-flight simulation."
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "title": "ReanalysisConfig",
+      "type": "object"
+    },
+    "RocketConfig": {
+      "additionalProperties": false,
+      "description": "Rocket body geometry, mass properties, and drag curves.",
+      "properties": {
+        "total_mass_without_motor": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Total rocket mass without motor [g].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Total Mass Without Motor"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Rocket total length [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Length"
+        },
+        "total_CG_without_motor_from_tip": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Center of gravity without motor, measured FROM THE NOSE TIP [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Total Cg Without Motor From Tip"
+        },
+        "diameter": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Rocket body diameter [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Diameter"
+        },
+        "moment_of_intertia_Z": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Moment of inertia about the roll (longitudinal) axis without motor and propellant, calculated [kg·m²].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Moment Of Intertia Z"
+        },
+        "moment_of_intertia_XY": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Moment of inertia about the pitch/yaw axes without motor and propellant, calculated [kg·m²].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Moment Of Intertia Xy"
+        },
+        "power_off_drag": {
+          "description": "Power-off drag coefficient curve filename in the project folder.",
+          "examples": [
+            "power_off_drag.csv"
+          ],
+          "title": "Power Off Drag",
+          "type": "string"
+        },
+        "power_on_drag": {
+          "description": "Power-on drag coefficient curve filename in the project folder.",
+          "examples": [
+            "power_on_drag.csv"
+          ],
+          "title": "Power On Drag",
+          "type": "string"
+        }
+      },
+      "required": [
+        "total_mass_without_motor",
+        "length",
+        "total_CG_without_motor_from_tip",
+        "diameter",
+        "moment_of_intertia_Z",
+        "moment_of_intertia_XY",
+        "power_off_drag",
+        "power_on_drag"
+      ],
+      "title": "RocketConfig",
+      "type": "object"
+    },
+    "TailconeConfig": {
+      "additionalProperties": false,
+      "description": "Tailcone geometry.",
+      "properties": {
+        "bottom_radius": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Tailcone bottom (rear) radius [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Bottom Radius"
+        },
+        "cylindrical_section_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Cylindrical section length at the top of the tailcone [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Cylindrical Section Length"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            }
+          ],
+          "description": "Total tailcone length [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Length"
+        }
+      },
+      "required": [
+        "bottom_radius",
+        "cylindrical_section_length",
+        "length"
+      ],
+      "title": "TailconeConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Full project config loaded from config.toml. Lengths are in mm and masses in g unless stated otherwise.",
+  "properties": {
+    "project": {
+      "description": "Project name, used for labeling outputs.",
+      "examples": [
+        "ALBATROSS"
+      ],
+      "title": "Project",
+      "type": "string"
+    },
+    "output_level": {
+      "default": 0,
+      "description": "Amount of output generated:\n- 0 (standard): most important prints + landing/safety plots\n- 1 (detailed): level 0 + per-flight custom plots + env prints\n- 2 (more detailed): level 1 + rocket/motor prints\n- 3 (debug): level 2 + more env plots",
+      "title": "Output Level",
+      "type": "integer"
+    },
+    "environment": {
+      "$ref": "#/$defs/EnvironmentConfig"
+    },
+    "engine": {
+      "$ref": "#/$defs/EngineConfig"
+    },
+    "motor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MotorConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "liquid_engine": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LiquidEngineConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rocket": {
+      "$ref": "#/$defs/RocketConfig"
+    },
+    "nosecone": {
+      "$ref": "#/$defs/NoseconeConfig"
+    },
+    "railbuttons": {
+      "$ref": "#/$defs/RailbuttonsConfig"
+    },
+    "tailcone": {
+      "$ref": "#/$defs/TailconeConfig"
+    },
+    "fins": {
+      "$ref": "#/$defs/FinsConfig"
+    },
+    "parachutes": {
+      "$ref": "#/$defs/ParachutesConfig"
+    },
+    "flight": {
+      "$ref": "#/$defs/FlightConfig"
+    },
+    "payload": {
+      "$ref": "#/$defs/PayloadConfig",
+      "default": {
+        "mass_total": 0.0,
+        "mass": null,
+        "diameter": null,
+        "length": null,
+        "moment_of_intertia_XY": null,
+        "moment_of_intertia_Z": null
+      }
+    },
+    "reanalysis": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReanalysisConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "project",
+    "environment",
+    "engine",
+    "rocket",
+    "nosecone",
+    "railbuttons",
+    "tailcone",
+    "fins",
+    "parachutes",
+    "flight"
+  ],
+  "title": "Config",
+  "type": "object"
+}
