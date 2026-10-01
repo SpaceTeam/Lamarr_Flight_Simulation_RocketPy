@@ -665,8 +665,8 @@ class CustomPlots:
             yaxis2_title=position_axis_title,
             yaxis_dtick=0.5,
             yaxis2_dtick=100,
-            width=1100,
-            height=550,
+            width=1500,
+            height=800,
         )
 
     def plot_angle_of_attack_and_attitude_angle(self):
@@ -736,8 +736,8 @@ class CustomPlots:
             flight_groups=flight_groups,
             yaxis_title="Angle [°]",
             yaxis2_title="Heading [°]",
-            width=1100,
-            height=500,
+            width=1500,
+            height=800,
         )
 
 
@@ -864,8 +864,8 @@ class CustomPlots:
             title=f"Angular velocity ({frame_label})",
             flight_groups=flight_groups,
             yaxis_title="Angular rate [°/s]",
-            width=1100,
-            height=500,
+            width=1500,
+            height=800,
             legend_x_pos=1.02,
             buttons_x_pos=1,
         )
