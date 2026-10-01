@@ -7,4 +7,5 @@
 
 # Exclude report.html and plots from GitHub language statistics.
 projects/**/report.html linguist-generated=true
+standalone_simulation_notebooks/**/report.html linguist-generated=true
 projects/**/plots/** linguist-generated=true
