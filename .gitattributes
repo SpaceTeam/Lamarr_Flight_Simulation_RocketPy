@@ -4,3 +4,5 @@
 #   - pip install nbstripout
 #   - in the repo containing the .git folder: nbstripout --install
 *.ipynb filter=nbstripout
+# Exclude report.html from GitHub language statistics.
+projects/**/report.html linguist-generated=true
