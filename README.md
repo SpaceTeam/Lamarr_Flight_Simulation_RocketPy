@@ -172,6 +172,6 @@ Varying any field here triggers a per-combo rebuild:
 You can share the `report.html` using `htmlpreview.github.io`.
 
 Example:
-https://htmlpreview.github.io/?https://github.com/SpaceTeam/Lamarr_Flight_Simulation_RocketPy/blob/config-variation-simulation/projects/ALBATROSS_II/report.html
+https://htmlpreview.github.io/?https://github.com/SpaceTeam/Lamarr_Flight_Simulation_RocketPy/blob/main/projects/ALBATROSS_II/report.html
 
 Due to the file size it takes some time to load.
