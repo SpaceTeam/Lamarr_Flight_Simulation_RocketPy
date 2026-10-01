@@ -169,3 +169,12 @@ When any field is varied, the flight ascent is simulated once per combination an
 Varying any field here triggers a per-combo rebuild:
 `motor`, `liquid_engine`, `rocket`, `nosecone`, `railbuttons`, `tailcone`, `fins`, `parachutes.main`, `parachutes.drogue`.
 
+---
+
+### Sharing results
+You can share the `report.html` using `htmlpreview.github.io`.
+
+Example:
+https://htmlpreview.github.io/?https://github.com/SpaceTeam/Lamarr_Flight_Simulation_RocketPy/blob/config-variation-simulation/projects/ALBATROSS_II/report.html
+
+Due to the file size it takes some time to load.
