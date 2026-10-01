@@ -181,7 +181,7 @@ def plot_all_flights_with_custom_plots(params: SimParams, scenario_sets):
             motors.append(flight.rocket.motor)
             plot_titles.append(label)
             rockets.append(flight.rocket)
-            rocket_configs.append({"total_length": params.config.rocket.length / 1000})
+            rocket_configs.append({"total_length": params.config.rocket.length})
 
     if len(flights) > _CUSTOM_PLOTS_FLIGHT_LIMIT:
         print(
