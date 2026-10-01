@@ -1,0 +1,15 @@
+# Git hooks run by the pre-commit framework before every commit.
+# Setup once per clone: pip install pre-commit, then run: pre-commit install
+repos:
+  - repo: local
+    hooks:
+      # Regenerates simulation_core/config_schemas/*.schema.json from simulation_core/config_schema.py.
+      # If that changes a schema file, the commit is stopped: review the change, git add the schema files and commit again.
+      - id: config-schemas
+        name: config schemas up to date
+        entry: python simulation_core/config_schema.py
+        language: python
+        # Same pydantic version as the repo uses, so the generated schema text matches exactly.
+        additional_dependencies: ["pydantic==2.13.4"]
+        files: ^(simulation_core/config_schema\.py|simulation_core/config_schemas/.*\.schema\.json)$
+        pass_filenames: false

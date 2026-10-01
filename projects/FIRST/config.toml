@@ -1,0 +1,78 @@
+#:schema ../../simulation_core/config_schemas/config.schema.json
+# Hover a key for its meaning and optional unit (Tombi); TOML syntax and variations: see README.md.
+project = "FIRST"
+output_level = 2
+
+[environment]
+# date = 2026-03-08T12:00:00
+date = "tomorrow_08_local"
+latitude = 48.8038043
+longitude = 12.5487077
+max_expected_height = 1000
+elevation = 355.45
+timezone = "Europe/Berlin"
+envType = ["Windy", "custom_atmosphere"]
+windy_weather_models = ["ICONEU"]
+custom_weather_models = ["icon_d2", "icon_eu"]
+
+[engine]
+type = "solid"
+
+[motor]
+name = "H238T"
+total_mass = 196
+propellant_mass = 83
+diameter = 29
+length = 194
+burn_time = 1
+center_of_dry_mass_factor = 0.5
+thrust = "thrust.csv"
+
+[rocket]
+total_mass_without_motor = 913              # measured
+length = 932                                # measured (230+760+30+470+600)
+total_CG_without_motor_from_tip = 515
+diameter = 62                               # measured
+moment_of_intertia_Z = 0.000439             # Estimated as a solid cylinder
+moment_of_intertia_XY = 0.066307            # Estimated as a solid cylinder
+power_off_drag = "power_off_drag.csv"
+power_on_drag = "power_on_drag.csv"
+
+[nosecone]
+length = 250                                # measured
+cylindrical_section_length = 0              # measured
+kind = "vonkarman"
+
+[railbuttons]
+upper_from_tip = 412                        # measured
+lower_from_tip = 912                        # measured
+
+[tailcone]
+bottom_radius = 27.5                        # measured
+cylindrical_section_length = 0              # measured
+length = 22
+
+[fins]
+amount = 3
+position = 177                              # measured
+name = "fins"
+shape_points = [[0, 0], [0.0281, 0.00618],              # measured
+                [0.0529, 0.0129], [0.0782, 0.0224], 
+                [0.0979, 0.0309], [0.119, 0.0416], 
+                [0.135, 0.0517], [0.148, 0.0568], 
+                [0.157, 0.059], [0.176, 0.059], 
+                [0.178, 0.0556], [0.181, 0.0432], 
+                [0.182, 0.0321], [0.182, 0.0169], 
+                [0.177, 0], [0, 0]
+                ]
+
+[parachutes.main]
+cd_s = 0.14283                              # calculated
+trigger = "apogee"
+sampling_rate = 105
+lag = 4
+
+[flight]
+rail_length = 4
+inclination = 85
+heading = 0

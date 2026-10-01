@@ -1,0 +1,9 @@
+# Streamlit reads this file when the app is started from this folder: streamlit run streamlit_app/app.py
+
+[global]
+# The KML import fills form fields through session_state while the form also passes the file's values; that is intended, so no warning.
+disableWidgetStateDuplicationWarning = true
+
+[server]
+# Rerun the app automatically when a source file is saved (note: this also stops a simulation that is running).
+runOnSave = true

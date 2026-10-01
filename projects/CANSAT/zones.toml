@@ -1,0 +1,31 @@
+#:schema ../../simulation_core/config_schemas/zones.schema.json
+# Coordinates: [distance_m, heading_deg] from the launch rail. heading: 0 = North, 90 = East, clockwise.
+exclusion_zone_safety_margin = 1.2
+
+[exclusion_zones]
+"Exclusion Zone Flughafen" = [
+    [450.11, 358.73],
+    [588.73, 339.12],
+    [618.55, 304.47],
+    [500.10, 271.15],
+    [400.12, 268.57],
+]
+"Exclusion Zone Niederham" = [
+    [1104.94, 244.82],
+    [241.87, 209.74],
+    [566.48, 159.33],
+    [967.73, 156.88],
+]
+"Rehwinkl" = [
+    [421.90, 121.44],
+    [863.13, 100.00],
+    [913.02, 118.81],
+    [581.38, 139.19],
+]
+
+[buffer_zones]
+"Buffer Zone Wald" = [
+    [450.11, 358.73],
+    [319.53, 110.14],
+    [781.86, 69.01],
+]

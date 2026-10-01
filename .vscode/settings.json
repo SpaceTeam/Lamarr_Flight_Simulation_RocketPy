@@ -1,0 +1,22 @@
+{
+    // Saving simulation_core/config_schema.py regenerates simulation_core/config_schemas/*.schema.json, then restarts Tombi so 
+    // the TOML files are re-checked against them.
+    // Uses the Python interpreter selected in VS Code; async: false makes the commands run one after another.
+    "runOnSave.commands": [
+        {
+            "match": "simulation_core[\\\\/]config_schema\\.py$",
+            "command": "\"${command:python.interpreterPath}\" \"${file}\"",
+            "runIn": "backend",
+            "async": false,
+            "doNotDisturb": true,
+            "runningStatusMessage": "Regenerating config schemas...",
+            "finishStatusMessage": "Config schemas regenerated"
+        },
+        {
+            "match": "simulation_core[\\\\/]config_schema\\.py$",
+            "command": "tombi.restartLanguageServer",
+            "runIn": "vscode",
+            "async": false
+        }
+    ]
+}

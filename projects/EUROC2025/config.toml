@@ -1,0 +1,110 @@
+#:schema ../../simulation_core/config_schemas/config.schema.json
+# Hover a key for its meaning and unit (Tombi); TOML syntax and variations: see README.md.
+project = "EUROC2025"
+output_level = 2
+
+[environment]
+date = 2025-10-12T17:00:00
+latitude = 39.39046096801758
+longitude = -8.288534164428711
+max_expected_height = 9000
+elevation = 159.97
+timezone = "Europe/Lisbon"
+envType = ["reanalysis"]
+reanalysis_file = "euroc_weather.nc"
+reanalysis_dictionary = "ECMWF"
+
+[engine]
+type = "liquid"
+
+[liquid_engine]
+holddown_time = 1.4
+nozzle_diameter = 75
+nozzle_position = -40                   # sticks out
+thrust = "thrust_euroc_launch.csv"
+
+# nitrogen_tank
+[liquid_engine.pressure_gas_tank]
+length = 235                            # measured
+outer_diameter = 93                     # measured
+volume = 1.2                            # measured
+massflow = 0.03                         # estimated
+fuel_center_from_tip = 2297             # measured; 1450 from the nozzle
+oxidizer_center_from_tip = 1094         # measured; 2653 from the nozzle
+substance = "N2"
+temperature = 298.15                    # 25 °C
+pressure = 30000000
+
+# ethanol_tank
+[liquid_engine.fuel_tank]
+length = 573                            # measured
+outer_diameter = 115                    # measured
+volume = 5.27                           # measured
+massflow = 0.45                         # tested
+center_from_tip = 2895                  # measured; 852 from the nozzle
+substance = "ethanol"
+temperature = 298.15                    # 25 °C
+pressure = 3000000
+
+# lox_tank
+[liquid_engine.oxidizer_tank]
+length = 573                            # measured
+outer_diameter = 115                    # measured  
+volume = 5.27                           # measured  
+massflow = 0.56                         # tested
+center_from_tip = 1787                  # measured; 1960 from the nozzle
+substance = "oxygen"
+temperature = 93.15                     # -180 °C
+pressure = 3000000
+
+[rocket]
+total_mass_without_motor = 17200        # measured
+length = 3707                           # measured
+total_CG_without_motor_from_tip = 1894  # measured
+diameter = 132.8                        # measured
+moment_of_intertia_Z = 0.0255           # calculated
+moment_of_intertia_XY = 16.8            # calculated
+power_off_drag = "power_off_drag.csv"
+power_on_drag = "power_on_drag.csv"
+
+[nosecone]
+length = 561                            # measured: 495 (nosecone) + 66 (tip) = 561
+cylindrical_section_length = 80
+kind = "lvhaack"
+
+[railbuttons]
+upper_from_tip = 2061                   # measured
+lower_from_tip = 3402                   # measured
+
+[tailcone]
+bottom_radius = 54                      # measured
+cylindrical_section_length = 35         # measured
+length = 245                            # measured
+
+[fins]
+amount = 4
+position = 250                          # measured
+name = "Biconvex-Freeform"
+shape_points = [[0, 0], [0.250, -0.012], [0.250, 0.108], [0.195, 0.108], [0, 0]]        # measured
+
+[parachutes.main]
+cd_s = 6.911503837897546                # calculated
+trigger = 450
+sampling_rate = 105
+lag = 4                                 # measured
+noise = [0, 8.3, 0.5]
+
+[parachutes.drogue]
+cd_s = 0.5336875                        # calculated
+trigger = "apogee"
+sampling_rate = 105
+lag = 1                                 # measured
+noise = [0, 8.3, 0.5]
+
+[flight]
+rail_length = 11
+inclination = 84
+heading = 184
+
+[reanalysis]
+sources = ["cats_vega", "altimax", "rcu"]

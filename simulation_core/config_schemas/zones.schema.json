@@ -1,0 +1,56 @@
+{
+  "additionalProperties": false,
+  "description": "Landing zones loaded from zones.toml. Each corner is [distance_m, heading_deg] from the launch rail, \nmeasured in Google Earth (heading clockwise from north: 0° = North, 90° = East).",
+  "properties": {
+    "exclusion_zones": {
+      "additionalProperties": {
+        "items": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        "type": "array"
+      },
+      "description": "Hard no-land areas (e.g. crowd, houses), shown in red. Keyed by zone name; quote names with spaces: \n\"My Zone\" = [[distance_m, heading_deg], ...].",
+      "title": "Exclusion Zones",
+      "type": "object"
+    },
+    "buffer_zones": {
+      "additionalProperties": {
+        "items": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        "type": "array"
+      },
+      "description": "Safety margin zones, or areas the rocket should preferably not land in (e.g. forest), shown in orange. \nA configuration is safe only if every simulated landing is outside every buffer zone.",
+      "title": "Buffer Zones",
+      "type": "object"
+    },
+    "exclusion_zone_safety_margin": {
+      "default": 1.0,
+      "description": "Factor that enlarges the exclusion zones into extra buffer zones, e.g. 1.3 = 30% larger.",
+      "title": "Exclusion Zone Safety Margin",
+      "type": "number"
+    }
+  },
+  "title": "ZonesConfig",
+  "type": "object"
+}

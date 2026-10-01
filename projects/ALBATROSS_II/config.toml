@@ -1,0 +1,79 @@
+#:schema ../../simulation_core/config_schemas/config.schema.json
+# Hover a key for its meaning and optional unit (Tombi); TOML syntax and variations: see README.md.
+project = "ALBATROSS_II"
+output_level = 2
+
+[environment]
+date = "tomorrow_08_local"  # todo: update time to 2026-10-25TXX:00:00
+latitude = 53.4836309  # todo: update when known exactly (Drawsko Pomorskie Military Site)
+longitude = 15.7148533  # todo: update when known exactly
+max_expected_height = 9000
+elevation = 123.889899  # todo: update when known exactly
+timezone = "Europe/Berlin"
+envType = ["Windy", "custom_atmosphere"]
+windy_weather_models = ["ICONEU"]
+custom_weather_models = ["icon_d2", "icon_eu"]
+
+[engine]
+type = "solid"
+
+[motor]
+name = "9977M2245-P"
+total_mass = 8182  # from thrustcurve
+propellant_mass = 5074  # from thrustcurve
+diameter = 75  # from thrustcurve
+length = 1025  # from thrustcurve
+burn_time = 4.3  # from thrustcurve
+center_of_dry_mass_factor = 0.49  # estimated (more weight at nozzle end when tank empty)
+thrust = "Cesaroni_9977M2245-P.eng"
+
+[rocket]
+total_mass_without_motor = 5593  # todo: update with real value (estimated)
+length = 2255  # todo: update with real value (estimated)
+total_CG_without_motor_from_tip = 1146.301  # todo: update with real value (estimated)
+diameter = 133
+moment_of_intertia_Z = 0.014163  # todo: update with real value (estimated)
+moment_of_intertia_XY = 2.009095  # todo: update with real value (estimated)
+power_off_drag = "power_off_drag.csv"
+power_on_drag = "power_on_drag.csv"
+
+[nosecone]
+length = 659  # measured; 585 (nosecone) + 74 (nosetip) = 659
+cylindrical_section_length = 81  # measured
+kind = "lvhaack"
+
+[railbuttons]
+upper_from_tip = 1300  # todo: update with real value (estimated)
+lower_from_tip = 1947.7  # todo: update with real value (estimated)
+
+[tailcone]
+bottom_radius = 53.35  # measured
+cylindrical_section_length = 35  # measured
+length = 280  # measured
+
+[fins]
+amount = 4
+position = 239.36126  # Onshape
+name = "Freeform"
+shape_points = [[0, 0], [0.1928, 0.0977], [0.248, 0.0977], [0.248, -0.0123]]  # # measured: [0,0] root leading edge; [0.1928,0.0977] up; [0.248,0.0977] straight; [0.248,-0.0123] down
+
+[parachutes.main]
+trigger = 250
+sampling_rate = 100  # default value
+cd = 1.8
+radius = 1.05  # 2.1 m / 2
+lag = 5  # measured
+
+[parachutes.drogue]
+trigger = "apogee"
+sampling_rate = 100  # default
+cd = 0.55
+radius = 0.4415481  # for a circle with area fabric_area (projected area is almost the fabric area)
+fabric_area = 0.6125  # 0.35^2 * 5
+lag = 1  # measured
+
+[flight]
+rail_length = 7  # todo: update and tell people how long the rail has to be for stable flight
+inclination = 89
+heading = 280
+
