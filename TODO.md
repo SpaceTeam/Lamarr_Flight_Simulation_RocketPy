@@ -3,7 +3,6 @@
 Open tasks for the RocketPy flight simulation. Check a box (`- [x]`) when a task is done,
 and move bigger tasks to GitHub Issues once they need discussion or an owner.
 
----
 
 ## General
 
@@ -31,8 +30,6 @@ and move bigger tasks to GitHub Issues once they need discussion or an owner.
 - [ ] Write a script that converts an OpenRocket config (XML file) to a RocketPy config and vice versa. It prompts the user for fields that the other tool does not have or handles differently. It also can compare existing config files and flag differences.
 - [ ] Write a script that compares simulation results of both tools.
 
-
----
 
 ## Project-specific
 
