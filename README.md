@@ -2,8 +2,6 @@
 
 Flight simulation for the rockets of TU Wien Space Team, built on [RocketPy](https://github.com/RocketPy-Team/RocketPy).
 
----
-
 ## Project structure
 ```
 Lamarr_Flight_Simulation_RocketPy/
@@ -35,8 +33,6 @@ Lamarr_Flight_Simulation_RocketPy/
 └── .vscode/settings.json             Run on Save: regenerates simulation_core/config_schemas/ when config_schema.py is saved
 ```
 
----
-
 ## Initial setup (once after cloning from GitHub)
 1. Use **Python 3.14**
 2. **Create one virtual environment** for each project, so each one can have it's own RocketPy version and thus the simulation results do not change, if you run it again later.
@@ -57,7 +53,6 @@ Lamarr_Flight_Simulation_RocketPy/
    - Notebook: open `jupyternb/simulation_orchestration.ipynb`, set `PROJECT` (e.g. `"ALBATROSS"`) and run all cells.
    - App: see [Streamlit app](#streamlit-app).
 
----
 
 ## Streamlit app
 ### Start
@@ -78,7 +73,6 @@ Lamarr_Flight_Simulation_RocketPy/
   After the run, its result and full output stay visible until the page is reloaded.
 - **Results tab:** the project's `report.html` and all plots saved in `projects/<PROJECT>/plots/`.
 
----
 
 ## Zones from Google Earth
 The landing zones in `zones.toml` can be drawn in Google Earth and imported from a KML file.
@@ -94,7 +88,6 @@ The landing zones in `zones.toml` can be drawn in Google Earth and imported from
 
 Each corner becomes `[distance_m, heading_deg]` (polar coordinates) from `launch_rail`, measured on the WGS84 ellipsoid (heading: 0 = North, 90 = East, clockwise).
 
----
 
 ## Config files
 The config files are TOML files in the project folder: `projects/<PROJECT>/config.toml` and `projects/<PROJECT>/zones.toml`.
@@ -156,7 +149,6 @@ Everything else is a constant.
 ### Notes
 - TOML has no `null`: leave an optional key out instead.
 
----
 
 ## Simulation with variations
 When any field is varied, the flight ascent is simulated once per combination and reused for the descent scenarios (this also happens without variations when a deployable payload is present). KML export is disabled when fields are varied.
@@ -175,7 +167,6 @@ When any field is varied, the flight ascent is simulated once per combination an
 Varying any field here triggers a per-combo rebuild:
 `motor`, `liquid_engine`, `rocket`, `nosecone`, `railbuttons`, `tailcone`, `fins`, `parachutes.main`, `parachutes.drogue`.
 
----
 
 ## Sharing results
 You can share the `report.html` using `htmlpreview.github.io`.
