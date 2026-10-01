@@ -19,6 +19,7 @@ and move bigger tasks to GitHub Issues once they need discussion or an owner.
 - [ ] Result sanity checks: warn when the stability margin is too low or the simulation produces other implausible values. Log a possible reason.
 - [ ] Standalone vs. variation check: compare a standalone simulation with the variation simulation using single values to make sure both return the same results. Standalone simulations are still needed for sending them to launch day organisators.
 - [ ] Standardize one solid and one liquid standalone version. 
+- [ ] Add variation for fin shape points.
 
 ### Streamlit app
 
