@@ -8,7 +8,7 @@ Pydantic models for the project config files config.toml and zones.toml: the def
   the JSON schemas and the app's help texts.
 
 Run `python simulation_core/config_schema.py` after changing the models to regenerate simulation_core/config_schemas/ for Tombi.
-See Documentation.md, "Config files", for how the models, schemas and editor fit together.
+See README.md, "Config files", for how the models, schemas and editor fit together.
 """
 
 from __future__ import annotations

@@ -1,4 +1,10 @@
-### Project structure
+# Lamarr Flight Simulation (RocketPy)
+
+Flight simulation for the rockets of TU Wien Space Team, built on [RocketPy](https://github.com/RocketPy-Team/RocketPy).
+
+---
+
+## Project structure
 ```
 Lamarr_Flight_Simulation_RocketPy/
 ├── simulation_core/                  shared code, used by the Jupyter notebook and the Streamlit app
@@ -31,7 +37,7 @@ Lamarr_Flight_Simulation_RocketPy/
 
 ---
 
-### Initial setup (once after cloning from GitHub)
+## Initial setup (once after cloning from GitHub)
 1. Use **Python 3.14**
 2. **Create one virtual environment** for each project, so each one can have it's own RocketPy version and thus the simulation results do not change, if you run it again later.
 
@@ -53,13 +59,13 @@ Lamarr_Flight_Simulation_RocketPy/
 
 ---
 
-### Streamlit app
-**Start**
+## Streamlit app
+### Start
 1. Open a terminal in the repo folder and activate the venv.
 2. Run `streamlit run streamlit_app\app.py`. The app opens in the browser at http://localhost:8501.
 3. Stop it with `Ctrl+C` in the terminal.
 
-**Use**
+### Use
 - **Sidebar:** choose the page: *Edit project* (then pick the project) or *New project*.
 - **New project page:** builds a new project folder in `projects/`. Start from an empty form or from the values of an existing project,
   fill in `config.toml` (and optionally `zones.toml`), upload the input files or copy them from the existing project, then press *Create project*.
@@ -74,7 +80,7 @@ Lamarr_Flight_Simulation_RocketPy/
 
 ---
 
-### Zones from Google Earth
+## Zones from Google Earth
 The landing zones in `zones.toml` can be drawn in Google Earth and imported from a KML file.
 
 1. In Google Earth, add a **point** named `launch_rail` at the launch rail location.
@@ -90,12 +96,12 @@ Each corner becomes `[distance_m, heading_deg]` (polar coordinates) from `launch
 
 ---
 
-### Config files
+## Config files
 The config files are TOML files in the project folder: `projects/<PROJECT>/config.toml` and `projects/<PROJECT>/zones.toml`.
 Everything about a single field (meaning, unit, allowed values, which fields are required together) is in the hover help:
 hover a key or `[section]` header in VS Code (Tombi setup: see [Initial setup](#initial-setup-once-after-cloning-from-github)).
 
-**How the pieces fit together**
+### How the pieces fit together
 - **TOML:** the config file format (syntax): `key = value`, `[sections]`, lists.
 - **Pydantic models** (`simulation_core/config_schema.py`): single source of truth for the definition of which keys and values are allowed.
 - **JSON Schema** (`simulation_core/config_schemas/*.json`): the same rules, generated from the models in a format IDEs understand; never edit by hand.
@@ -109,7 +115,7 @@ The rules are used at two moments:
 `tomllib` only checks the TOML syntax; `model_validate` checks the content (unknown keys such as typos, wrong types, range strings).
 Pydantic is the check that counts; Tombi only gives the same feedback earlier.
 
-**Changing the models**
+### Changing the models
 - Each field's description and examples are written in the `Attributes` section of its class docstring, which is also the Tombi hover text.
   How to write it: see the docstring of `_Base` in `config_schema.py`.
 - Fields with a fixed set of values (e.g. `engine.type`, `envType`, `nosecone.kind`, `reanalysis.sources`) are defined as `Literal` types at the top of `config_schema.py`; hovering the key in a config file lists them.
@@ -117,7 +123,7 @@ Pydantic is the check that counts; Tombi only gives the same feedback earlier.
 - Commit the regenerated schema files together with the model change (the pre-commit hook enforces this).
 - An already open TOML file only shows new errors after the next keystroke in it.
 
-**Syntax: general**
+### Syntax: general
 | Type | Format | Example |
 |------|--------|---------|
 | Comment | `#` until the end of the line | `length = 659  # [mm] measured` |
@@ -126,7 +132,7 @@ Pydantic is the check that counts; Tombi only gives the same feedback earlier.
 | Small table on one line | `key = { a = x }` | `reanalysis_csv = { icon_d2 = "file.csv" }` |
 | Date and time | TOML local date-time, in launch-site time | `date = 2026-05-23T13:12:00` |
 
-**Syntax: variations**
+### Syntax: variations
 Used to simulate varying flight scenarios, e.g. `flight.heading`, `flight.inclination`, `payload.mass`, `parachutes.payload.cd_s`.\
 Fields that can be varied say *Variable* in their hover help (in `config_schema.py`: typed with `FLOAT_RANGE_EXPANSION` / `INT_RANGE_EXPANSION`). The simulation runs one flight per combination of all varied fields (full cartesian product).
 Range strings are expanded to lists while the config is validated (see `FLOAT_RANGE_EXPANSION` in `config_schema.py`), so the rest of the pipeline only ever sees lists or scalar values.
@@ -136,7 +142,7 @@ Range strings are expanded to lists while the config is validated (see `FLOAT_RA
 | List | `a = [x, y, z]` | `heading = [182, 190, 199]` | `[182, 190, 199]` |
 | Range string | `a = "start..stop:step"` <br> end inclusive if the step does not overshoot; <br> if start > stop the range wraps around 360° (heading only) | `inclination = "86..90:2"`<br> `inclination = "160..200:15"`<br> `heading = "180..90:10"` | `[86, 88, 90]`<br> `[160, 175, 190]`<br> `[180, 190, ..., 350, 0, 10, ..., 90]`|
 
-**Syntax: constants**
+### Syntax: constants
 Everything else is a constant.
 
 | Type | Format | Example |
@@ -147,12 +153,12 @@ Everything else is a constant.
 | Nested list | `a = [[v, w], [x, y]]` | `shape_points = [[0, 0], [0.250, -0.012]]` |
 | Boolean | `a = false` | `enabled = false` |
 
-**Notes**
+### Notes
 - TOML has no `null`: leave an optional key out instead.
 
 ---
 
-### Simulation with variations
+## Simulation with variations
 When any field is varied, the flight ascent is simulated once per combination and reused for the descent scenarios (this also happens without variations when a deployable payload is present). KML export is disabled when fields are varied.
 
 **Scenarios produced per combination depend on what varies and the environment type:**
@@ -165,13 +171,13 @@ When any field is varied, the flight ascent is simulated once per combination an
 | any rocket component field | any | nominal only | rebuilt per combination |
 | rocket components + flight parameters mixed | any | nominal only | rebuilt per combination |
 
-**Rocket component sections** \
+### Rocket component sections
 Varying any field here triggers a per-combo rebuild:
 `motor`, `liquid_engine`, `rocket`, `nosecone`, `railbuttons`, `tailcone`, `fins`, `parachutes.main`, `parachutes.drogue`.
 
 ---
 
-### Sharing results
+## Sharing results
 You can share the `report.html` using `htmlpreview.github.io`.
 
 Example:

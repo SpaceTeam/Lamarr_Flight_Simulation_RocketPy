@@ -25,7 +25,7 @@ SCHEMA_PATH_BY_MODEL = {Config: CONFIG_SCHEMA_PATH, ZonesConfig: ZONES_SCHEMA_PA
 
 # Comment lines written at the top of a new file
 HEADER_COMMENTS_BY_MODEL = {
-    Config: ["Hover a key for its meaning and optional unit (Tombi); TOML syntax and variations: see Documentation.md."],
+    Config: ["Hover a key for its meaning and optional unit (Tombi); TOML syntax and variations: see README.md."],
     ZonesConfig: ["Coordinates: [distance_m, heading_deg] from the launch rail. heading: 0 = North, 90 = East, clockwise."],
 }
 

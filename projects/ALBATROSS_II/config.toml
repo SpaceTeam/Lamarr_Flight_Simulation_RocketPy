@@ -1,5 +1,5 @@
 #:schema ../../simulation_core/config_schemas/config.schema.json
-# Hover a key for its meaning and optional unit (Tombi); TOML syntax and variations: see Documentation.md.
+# Hover a key for its meaning and optional unit (Tombi); TOML syntax and variations: see README.md.
 project = "ALBATROSS_II"
 output_level = 2
 

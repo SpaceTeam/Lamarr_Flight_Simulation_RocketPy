@@ -1,5 +1,5 @@
 #:schema ../../simulation_core/config_schemas/config.schema.json
-# Hover a key for its meaning and unit (Tombi); TOML syntax and variations: see Documentation.md.
+# Hover a key for its meaning and unit (Tombi); TOML syntax and variations: see README.md.
 project = "EUROC2025"
 output_level = 2
 
