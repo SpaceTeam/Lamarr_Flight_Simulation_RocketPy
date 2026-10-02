@@ -13,6 +13,7 @@ from nbconvert import HTMLExporter
 
 from matplotlib.path import Path as MatplotlibPath
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from rocketpy.simulation import FlightDataExporter
 from rocketpy import Flight, Environment, Motor, Fins, Rocket
@@ -698,29 +699,58 @@ def print_variation_stats(params: SimParams):
     if not has_rocket_component_variations(params.config):
         return
 
-    headers = ["Config", "Thrust to weight ratio\n@ rail exit", "rail exit velocity\n[m/s]", "stability @ rail exit\n[cal]", "apogee AGL\n[m]"]
+    headers = ["Environment", "Config", "Thrust to weight ratio\n@ rail exit", "rail exit velocity\n[m/s]", 
+               "stability @ rail exit\n[cal]", 
+               "apogee AGL\n[m]",
+               "Impact speed\n[m/s]",
+               "Landing distance from launch\n[m]"]
+    add_drogue_stats = False
     rows = []
 
-    for scenario_set in params.runtime.scenario_sets:
-        flight = scenario_set.get("nominal")
-        if flight is None:
-            continue
+    nominal_flights = [scenario_set["nominal"] for scenario_set in params.runtime.scenario_sets if "nominal" in scenario_set]
+    # Sort by the variation values
+    nominal_flights.sort(key=lambda flight: (tuple(getattr(flight, "_meta", {}).values()), flight.env.name))
 
+    for flight in nominal_flights:
         meta = getattr(flight, "_meta", {})
+        config_str = ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else "—"
         t_rail = flight.out_of_rail_time
+        t_w = flight.rocket.motor.thrust(t_rail) / (flight.rocket.total_mass(t_rail) * 9.81)
         v_rail = flight.out_of_rail_velocity
         stability = flight.stability_margin(t_rail)
-        t_w = flight.rocket.motor.thrust(t_rail) / (flight.rocket.total_mass(t_rail) * 9.81)
         apogee_agl = flight.apogee - flight.env.elevation
-
-        config_str = ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else "—"
-        rows.append([config_str, f"{t_w:.2f}", f"{v_rail:.1f}", f"{stability:.2f}", f"{apogee_agl:.0f}"])
+        landing_distance = np.hypot(flight.x_impact, flight.y_impact)
+        
+        row_values = [flight.env.name, config_str, round(t_w, 2), round(v_rail, 1), round(stability, 2), round(apogee_agl), round(abs(flight.impact_velocity), 2), 
+                      round(landing_distance)]
+        
+        # average vertical speed in drogue phase
+        opening_times = {parachute.name: trigger_time + parachute.lag for trigger_time, parachute in flight.parachute_events}
+        drogue_start = opening_times.get("drogue")
+        if drogue_start:
+            drogue_end = opening_times.get("main", flight.t_final)
+            time_samples = np.linspace(drogue_start, drogue_end, 1000)      # 1000 evenly spaced samples over the drogue phase
+            speed = np.array([flight.speed(time) for time in time_samples], dtype=float)
+            average_drogue_speed = abs(speed.mean())
+            row_values.append(round(average_drogue_speed, 2))
+            add_drogue_stats = True
+            
+        rows.append(row_values)
 
     if not rows:
         return
 
-    printmd("## Variation Stats")
-    print(tabulate(rows, headers=headers, tablefmt="simple", colalign=("left", "right", "right", "right", "right")))
+    if add_drogue_stats:
+        headers.append("avg speed in drogue phase\n[m/s]")
+        
+    printmd("## Variation stats for nominal flights")
+    print(tabulate(rows, headers=headers, tablefmt="simple", colalign=("left", "left", "right", "right", "right", "right", "right", "right", "right")))
+
+    # Export table to excel
+    excel_path = params.project_path / "variation_stats.xlsx"
+    excel_headers = [header.replace("\n", " ") for header in headers]
+    pd.DataFrame(rows, columns=excel_headers).to_excel(excel_path, index=False)
+    print(f"\nExported to: {excel_path}")
 
 
 def calculate_safe_flights(params: SimParams, buffer_zones: dict):
