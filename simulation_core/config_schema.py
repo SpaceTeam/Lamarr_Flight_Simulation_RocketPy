@@ -47,7 +47,7 @@ JSON_SCHEMA_TYPES_BY_PYTHON_TYPE = {
 # Allowed string values
 # =============================================================================
 # Literal types show up as autocomplete choices in the TOML editor, and any other value is rejected when loading.
-
+ScenarioName = Literal["nominal", "no_main", "ballistic"]
 EngineType = Literal["solid", "liquid"]         # hybrid not supported by this codebase yet
 EnvironmentType = Literal["standard_atmosphere", "standard_atmosphere_wind", "Windy", "custom_atmosphere", "reanalysis", "reanalysis_custom"]
 WindyModel = Literal["ECMWF", "GFS", "ICON", "ICONEU"]
@@ -329,7 +329,7 @@ class EnvironmentConfig(_Base):
     timezone: str
     envType: Union[EnvironmentType, list[EnvironmentType]]
     reanalysis_csv: Optional[dict[str, str]] = None
-    standard_atmosphere_wind_speeds: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
+    standard_atmosphere_wind_speeds: Optional[float | list[float]] = None
     windy_weather_models: Optional[Union[WindyModel, list[WindyModel]]] = None
     custom_weather_models: Optional[Union[str, list[str]]] = None
     reanalysis_file: Optional[str] = None
@@ -823,9 +823,16 @@ class Config(_Base):
         - 1 (detailed): level 0 + per-flight custom plots + env prints
         - 2 (more detailed): level 1 + rocket/motor prints
         - 3 (debug): level 2 + more env plots
+    scenarios
+        Scenarios to simulate for every flight. Supported values:
+        - "nominal": All parachutes deploy. Required, since the safety analysis and deployable payload build on it.
+        - "no_main": Flight without main parachute (only simulated if a drogue parachute is configured)
+        - "ballistic": No parachute flight scenario
+        - Example: ["nominal", "ballistic"]
     """
     project: str
     output_level: int = 0
+    scenarios: list[ScenarioName] = ["nominal", "no_main", "ballistic"]
     # The section fields below need no description: the hover shows the docstring of their model class.
     environment: EnvironmentConfig
     engine: EngineConfig
@@ -903,8 +910,8 @@ class RuntimeParams(BaseModel):
         Each scenario_set is a ``{scenario_name: Flight}`` dict for one heading/inclination/env combination.<br>
         Keys: 
         - ``"nominal"`` (always)
-        - ``"no_main"`` (only with drogue)
-        - ``"ballistic"`` (always)
+        - ``"no_main"`` (only with drogue and when selected in config.scenarios)
+        - ``"ballistic"`` (only when selected in config.scenarios)
         - ``"matched"`` (only in reanalysis mode)
     ascent_flights_by_env: 
         Dict of {env_name: [Flight, ...]} when ascent flights are reused (variations or a deployable payload).

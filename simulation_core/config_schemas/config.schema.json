@@ -258,15 +258,11 @@
               ]
             },
             {
-              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
-              "type": "string"
-            },
-            {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Average wind speeds for the standard_atmosphere_wind environment [m/s]; the wind comes from the East (90°)\nand varies over height by 10 % (OpenRocket's default turbulence intensity). One value is used for the whole altitude range.\nMultiple values simulate several environments, one per value.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "description": "Average wind speeds for the standard_atmosphere_wind environment [m/s]; the wind comes from the East (90°)\nand varies over height by 10 % (OpenRocket's default turbulence intensity). One value is used for the whole altitude range.\nMultiple values simulate several environments, one per value.",
           "examples": [
             [
               0,
@@ -2952,6 +2948,30 @@
       "description": "Amount of output generated:\n- 0 (standard): most important prints + landing/safety plots\n- 1 (detailed): level 0 + per-flight custom plots + env prints\n- 2 (more detailed): level 1 + rocket/motor prints\n- 3 (debug): level 2 + more env plots",
       "title": "Output Level",
       "type": "integer"
+    },
+    "scenarios": {
+      "default": [
+        "nominal",
+        "no_main",
+        "ballistic"
+      ],
+      "description": "Scenarios to simulate for every flight. Supported values:\n- \"nominal\": All parachutes deploy. Required, since the safety analysis and deployable payload build on it.\n- \"no_main\": Flight without main parachute (only simulated if a drogue parachute is configured)\n- \"ballistic\": No parachute flight scenario",
+      "examples": [
+        [
+          "nominal",
+          "ballistic"
+        ]
+      ],
+      "items": {
+        "enum": [
+          "nominal",
+          "no_main",
+          "ballistic"
+        ],
+        "type": "string"
+      },
+      "title": "Scenarios",
+      "type": "array"
     },
     "environment": {
       "$ref": "#/$defs/EnvironmentConfig"

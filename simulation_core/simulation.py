@@ -10,6 +10,7 @@ from pathlib import Path
 import CoolProp.CoolProp as CP
 import numpy as np
 import pandas as pd
+from IPython.display import display
 from openmeteo_requests import OpenMeteoRequestsError
 
 from rocketpy import (
@@ -38,7 +39,7 @@ from simulation_core import deployable_payload
 
 DEBUG = False
 # Standard Environment with wind
-WIND_PROFILE_STEP_M = 100       # height spacing of wind levels
+WIND_PROFILE_STEP_M = 200       # height spacing of wind levels
 WIND_PROFILE_SEED = 42          # fixed seed so every run gets the same wind profiles and results stay comparable
 WIND_TURBULENCE_INTENSITY = 0.1     # standard deviation of varied wind speed, as a fraction of the wind speed
 
@@ -696,15 +697,18 @@ def create_rocket(params: SimParams):
 # =============================================================================
 
 def create_flight(params: SimParams):
-    """Create scenario flights for every configured environment; store in params.runtime.flights_by_env.
+    """Create one flight per scenario for every environment and config combination; assumes environment, engine and rocket exist.
 
-    Assumes create_environment, create_engine, and create_rocket have already run.
-    Rebuilds engine and rocket per combination only when a rocket component field is varied.
+    - A rocket component is varied (fins, motor, nosecone, main/drogue parachute, ...): one "nominal" flight per 
+        rocket component combination and per environment.
+    - A deployable payload is present: one "nominal" flight per environment and mass variation, plus one flight per scenario.
+        Ascent is simulated once per environment and mass, and reused by that mass's scenario flights.
+        The payload flight starts at that apogee.
+    - A flight parameter is varied (rail length, heading, inclination, ...): one flight per scenario, per environment and variation. 
+    - Reanalysis environment: only "nominal"; the reanalysis adds an optional matched flight later.
 
-    - Ascent flights are simulated separately and reused when any config field is varied, or a deployable payload is present.
-    - Rocket component variations (fins, motor, nosecone, etc.) produce one nominal flight per combination.
-    - Payload mass variation produces all scenarios (nominal / no main / ballistic) per combination.
-    - No variation produces all scenarios per combination.
+    User can select which scenarios to simulate in params.config.scenarios ("nominal" is required); "no_main" only if a drogue is configured.
+    Results are saved in Flight objects and go to params.runtime.flights_by_env.
     """
     printmd("## Flights")
     print("Creating flights...")
@@ -715,14 +719,24 @@ def create_flight(params: SimParams):
         for path, values in varied.items():
             print(f"  {'.'.join(path)}: {values}")
 
+    selected_scenarios = params.config.scenarios
+    if "nominal" not in selected_scenarios:
+        raise ValueError('config.scenarios must contain "nominal": the safety analysis and deployable payload build on it.')
+
     has_payload = deployable_payload.has_deployable_payload(params)
     # When rocket components vary, only the nominal scenario is produced per combination.
-    # Payload and flight-parameter variations still produce all scenarios.
+    # Payload and flight-parameter variations still produce all selected scenarios.
     only_nominal_variation = has_rocket_component_variations(params.config)
     rebuild_rocket = only_nominal_variation
-    # Ascent is simulated separately only when multiple descent scenarios reuse it, or when a
-    # payload needs it. Rocket-component variations produce one full nominal flight — no ascent split needed.
-    reuse_ascent_flights = (has_variations(params.config) and not only_nominal_variation) or has_payload
+
+    has_drogue_base = params.config.parachutes.drogue is not None
+    if only_nominal_variation:
+        scenarios_per_combo = 1
+    else:
+        # no_main is only simulated when there is a drogue to fall back on.
+        scenarios_per_combo = len([name for name in selected_scenarios if name != "no_main" or has_drogue_base])
+    # Ascent is simulated separately only when several descent scenarios reuse it, or when a deployable payload needs it.
+    reuse_ascent_flights = (has_variations(params.config) and scenarios_per_combo > 1) or has_payload
 
     environments = params.runtime.environments
     flights_by_env = {env_name: [] for env_name in environments}
@@ -731,17 +745,22 @@ def create_flight(params: SimParams):
     combinations = list(generate_config_combinations(params.config))
     total = len(combinations)
 
-    has_drogue_base = params.config.parachutes.drogue is not None
-    if only_nominal_variation:
-        scenarios_per_combo = 1
-    else:
-        scenarios_per_combo = 3 if has_drogue_base else 2
-    flights_per_combo = scenarios_per_combo + 1 if reuse_ascent_flights else scenarios_per_combo
-    # Each combination produces one scenario set per environment, plus an ascent in reuse mode.
-    print(f"Amount: {total * flights_per_combo * len(environments)}")
+    # Reanalysis environments without variations only get the nominal flight (the matched flight is added separately).
+    nominal_only_envs = {
+        env_name for env_name in environments
+        if only_nominal_variation or (env_name.startswith("Reanalysis") and not has_variations(params.config))
+    }
+    # Each combination produces one scenario set per environment, plus an ascent per environment in reuse mode.
+    flights_per_combo = sum(1 if env_name in nominal_only_envs else scenarios_per_combo for env_name in environments)
+    if reuse_ascent_flights:
+        flights_per_combo += len(environments)
+    total_flights = total * flights_per_combo
+
+    progress = display({"text/plain": f"Flight 0/{total_flights}"}, raw=True, display_id=True)
+    finished_flights = 0
 
     # create one flight per scenario per environment; reuse ascent flight when configured
-    for i, combo_config in enumerate(combinations, start=1):
+    for combo_config in combinations:
         # Build a params view with this combo's config; runtime is shared with params
         combo_params = params.model_copy(update={"config": combo_config})
 
@@ -758,15 +777,12 @@ def create_flight(params: SimParams):
 
         flight_config = combo_config.flight
         payload_mass_total = combo_config.payload.mass_total if isinstance(combo_config.payload.mass_total, (int, float)) else 0
-        scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, payload_mass_total)
+        scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, selected_scenarios, payload_mass_total)
 
         meta = build_variation_meta(params.config, combo_config)
-        meta_str = (", ".join(f"{k}={v}" for k, v in meta.items())) if meta else ""
-        print(f"{i / total:.0%}" + (f" - {meta_str}" if meta_str else ""))
-        
+        meta_suffix = " - " + ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else ""
+
         for env_name, environment in environments.items():
-            # if i / total >= 0.77:
-            #     print(f"env={env_name}, flight_values={flight_values}")
             ascent_flight = None
             scenario_set = {}
 
@@ -783,13 +799,12 @@ def create_flight(params: SimParams):
                 )
                 tag_variation(ascent_flight, meta)
                 ascent_flights_by_env[env_name].append(ascent_flight)
+                finished_flights += 1
+                progress.update({"text/plain": f"Flight {finished_flights}/{total_flights}: {env_name} | ascent{meta_suffix}"}, raw=True)
 
-            # Reanalysis environments in single-flight mode: nominal only (matched flight is added separately).
-            # Reanalysis environments with variations, or any other env: all scenarios.
-            reanalysis_single = env_name.startswith("Reanalysis") and not has_variations(params.config)
             scenarios_for_env = (
                 {"nominal": scenario_rockets["nominal"]}
-                if only_nominal_variation or reanalysis_single
+                if env_name in nominal_only_envs
                 else scenario_rockets
             )
 
@@ -810,8 +825,12 @@ def create_flight(params: SimParams):
                 flight = Flight(**flight_options)
                 tag_variation(flight, meta)
                 scenario_set[scenario_name] = flight
+                finished_flights += 1
+                progress.update({"text/plain": f"Flight {finished_flights}/{total_flights}: {env_name} | {scenario_name}{meta_suffix}"}, raw=True)
 
             flights_by_env[env_name].append(scenario_set)
+
+    progress.update({"text/plain": f"{finished_flights}/{total_flights} flights simulated"}, raw=True)
 
     params.runtime.flights_by_env = flights_by_env
     params.runtime.scenario_sets = [s for sets in flights_by_env.values() for s in sets]
@@ -824,23 +843,23 @@ def create_flight(params: SimParams):
         deployable_payload.create_payload_flight(params)
 
 
-def build_scenario_rockets(base_rocket, has_drogue, payload_mass_total=0):
-    """Build rocket variants for descent scenarios by deep-copying and trimming the parachute list.
+def build_scenario_rockets(base_rocket, has_drogue, scenario_names, payload_mass_total=0):
+    """Build rocket variants for the selected descent scenarios by deep-copying and trimming the parachute list.
 
-    Returns {scenario_name: rocket}. When payload_mass_total > 0, the payload mass is
+    Returns {scenario_name: rocket}; no_main is skipped without a drogue. When payload_mass_total > 0, the payload mass is
     removed from all scenario rockets before descent is simulated.
     """
-    # Each scenario gets its own deep copy so RocketPy can hold scenario-specific parachute lists.
-    nominal_rocket = copy.deepcopy(base_rocket)
-    ballistic_rocket = copy.deepcopy(base_rocket)
-    ballistic_rocket.parachutes = []
-
-    if not has_drogue:
-        scenario_rockets = {"nominal": nominal_rocket, "ballistic": ballistic_rocket}
-    else:
-        no_main_rocket = copy.deepcopy(base_rocket)
-        no_main_rocket.parachutes = [parachute for parachute in no_main_rocket.parachutes if parachute.name != "main"]
-        scenario_rockets = {"nominal": nominal_rocket, "no_main": no_main_rocket, "ballistic": ballistic_rocket}
+    scenario_rockets = {}
+    for scenario_name in scenario_names:
+        if scenario_name == "no_main" and not has_drogue:
+            continue
+        # Each scenario gets its own deep copy so RocketPy can hold scenario-specific parachute lists.
+        rocket = copy.deepcopy(base_rocket)
+        if scenario_name == "no_main":
+            rocket.parachutes = [parachute for parachute in rocket.parachutes if parachute.name != "main"]
+        elif scenario_name == "ballistic":
+            rocket.parachutes = []
+        scenario_rockets[scenario_name] = rocket
 
     payload_mass_kg = grams_to_kilograms(payload_mass_total)
     if payload_mass_kg > 0:
