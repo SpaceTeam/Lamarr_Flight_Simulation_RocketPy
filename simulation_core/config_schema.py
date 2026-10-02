@@ -13,6 +13,7 @@ See README.md, "Config files", for how the models, schemas and editor fit togeth
 
 from __future__ import annotations
 import dataclasses
+import functools
 import inspect
 import json
 import math
@@ -20,7 +21,7 @@ import textwrap
 import tomllib
 from pathlib import Path
 from typing import Annotated, Union, Optional, Any, Literal, get_args
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, NaiveDatetime, ValidationInfo, WithJsonSchema
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, NaiveDatetime, ValidationInfo, WithJsonSchema, model_validator
 from pydantic.fields import FieldInfo
 
 SCHEMA_DIR = Path(__file__).resolve().parent / "config_schemas"
@@ -41,6 +42,10 @@ JSON_SCHEMA_TYPES_BY_PYTHON_TYPE = {
     list: {"array"},
     dict: {"object"},
 }
+# Config fields that are varied pairwise and thus must have the same number of values.
+PAIRED_VARIATIONS = [
+    (("rocket", "total_mass_without_motor"), ("rocket", "total_CG_without_motor_from_tip")),
+]
 
 
 # =============================================================================
@@ -507,10 +512,12 @@ class RocketConfig(_Base):
     ----------
     total_mass_without_motor
         Total rocket mass without motor [g].
+        Varies together with total_CG_without_motor_from_tip: as lists, both need the same length.
     length
         Rocket total length [mm].
     total_CG_without_motor_from_tip
         Center of gravity without motor, measured FROM THE NOSE TIP [mm].
+        Varies together with total_mass_without_motor: as lists, both need the same length.
     diameter
         Rocket body diameter [mm].
     moment_of_intertia_Z
@@ -847,6 +854,16 @@ class Config(_Base):
     flight: FlightConfig
     payload: PayloadConfig = PayloadConfig()
     reanalysis: Optional[ReanalysisConfig] = None
+
+    @model_validator(mode="after")
+    def check_paired_variation_lengths(self) -> "Config":
+        """Reject fields that vary together when their value lists have different lengths."""
+        for group in PAIRED_VARIATIONS:
+            values_by_name = {".".join(path): functools.reduce(getattr, path, self) for path in group}
+            list_lengths = {name: len(values) for name, values in values_by_name.items() if isinstance(values, list)}
+            if len(set(list_lengths.values())) > 1:
+                raise ValueError(f"These fields vary together and need the same number of values: {list_lengths}")
+        return self
 
 
 # =============================================================================

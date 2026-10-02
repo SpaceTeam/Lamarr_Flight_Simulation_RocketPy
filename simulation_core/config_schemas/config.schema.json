@@ -2653,7 +2653,7 @@
               "type": "string"
             }
           ],
-          "description": "Total rocket mass without motor [g].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "description": "Total rocket mass without motor [g].\nVaries together with total_CG_without_motor_from_tip: as lists, both need the same length.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
           "title": "Total Mass Without Motor"
         },
         "length": {
@@ -2711,7 +2711,7 @@
               "type": "string"
             }
           ],
-          "description": "Center of gravity without motor, measured FROM THE NOSE TIP [mm].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "description": "Center of gravity without motor, measured FROM THE NOSE TIP [mm].\nVaries together with total_mass_without_motor: as lists, both need the same length.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
           "title": "Total Cg Without Motor From Tip"
         },
         "diameter": {

@@ -9,7 +9,7 @@ from pathlib import Path
 from IPython import get_ipython
 from IPython.display import Markdown, display
 from pydantic import BaseModel
-from simulation_core.config_schema import Config, SimParams, ZonesConfig, accepts_variation
+from simulation_core.config_schema import Config, SimParams, ZonesConfig, PAIRED_VARIATIONS, accepts_variation
 
 
 def printmd(string):
@@ -111,8 +111,23 @@ def generate_config_combinations(config):
     """Yield one Config per combination of all varied fields across all config sections.
 
     Fields typed with FLOAT_RANGE_EXPANSION / INT_RANGE_EXPANSION accept a list of values to vary. Range strings are already expanded
-    to lists by FLOAT_RANGE_EXPANSION / INT_RANGE_EXPANSION in config_schema. When nothing varies, yields
-    the original config once.
+    to lists by FLOAT_RANGE_EXPANSION / INT_RANGE_EXPANSION in config_schema. Fields in PAIRED_VARIATIONS are varied
+    pairwise. When nothing varies, yields the original config once.
+
+    The varied fields are first collected into variation_groups: one (field paths, value tuples) entry per group of fields
+    that change together. Single fields are groups of one, so pairs and single fields have the same shape.
+    Every combination of the groups' tuples then becomes one config. Example:
+
+        rocket.total_mass_without_motor = [5400, 5800]
+        rocket.total_CG_without_motor_from_tip = [1090, 1115]
+        flight.heading = [80, 90, 100]
+
+        variation_groups = [
+            ([("rocket", "total_mass_without_motor"), ("rocket", "total_CG_without_motor_from_tip")], [(5400, 1090), (5800, 1115)]),
+            ([("flight", "heading")], [(80,), (90,), (100,)]),
+        ]
+
+        -> 2 x 3 = 6 configs, e.g. mass=5400, CG=1090, heading=90
     """
     varied = collect_nested_variations(config)
 
@@ -120,9 +135,27 @@ def generate_config_combinations(config):
         yield config
         return
 
-    keys = list(varied.keys())
-    for combo in itertools.product(*[varied[k] for k in keys]):
-        values = dict(zip(keys, combo))
+    # Each group is (paths, value tuples); itertools.product combines the groups, not the single fields.
+    variation_groups = []
+    paired_paths = set()
+    for group in PAIRED_VARIATIONS:
+        varied_group = [path for path in group if path in varied]
+        # A group with only one varied field behaves like any other single field.
+        if len(varied_group) > 1:
+            # strict=True: Config validation already ensures equal lengths, so a mismatch here is a bug.
+            variation_groups.append((varied_group, list(zip(*[varied[path] for path in varied_group], strict=True))))
+            paired_paths.update(varied_group)
+    for path, path_values in varied.items():
+        if path not in paired_paths:
+            variation_groups.append(([path], [(value,) for value in path_values]))
+
+    for combo in itertools.product(*[value_tuples for _, value_tuples in variation_groups]):
+        # Spread each group's value tuple back onto its field paths.
+        values = {
+            path: value
+            for (paths, _), value_tuple in zip(variation_groups, combo)
+            for path, value in zip(paths, value_tuple)
+        }
 
         # Group updates by section, separated into direct (depth-2) and nested (depth-3) updates
         by_section = {}
@@ -147,14 +180,6 @@ def generate_config_combinations(config):
             config_update[section_name] = section
 
         yield config.model_copy(update=config_update)
-
-
-def count_config_combinations(config):
-    """Count how many combinations generate_config_combinations will yield for this config."""
-    count = 1
-    for values in collect_nested_variations(config).values():
-        count *= len(values)
-    return count
 
 
 def _diff_flat(base, combo):
