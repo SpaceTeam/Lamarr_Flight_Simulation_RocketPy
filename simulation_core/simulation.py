@@ -37,6 +37,10 @@ from simulation_core.custom_print_and_plot_functions import CustomPlots, plot_wi
 from simulation_core import deployable_payload
 
 DEBUG = False
+# Standard Environment with wind
+WIND_PROFILE_STEP_M = 100       # height spacing of wind levels
+WIND_PROFILE_SEED = 42          # fixed seed so every run gets the same wind profiles and results stay comparable
+WIND_TURBULENCE_INTENSITY = 0.1     # standard deviation of varied wind speed, as a fraction of the wind speed
 
 
 # =============================================================================
@@ -122,6 +126,27 @@ def create_environment(params: SimParams):
             forecast_env.name = f"{weather_model}_WINDY"
             set_labels(forecast_env)
             environments[forecast_env.name] = forecast_env
+
+    if "standard_atmosphere_wind" in environment_types:
+        if not env_config.standard_atmosphere_wind_speeds:
+            raise ValueError("environment.standard_atmosphere_wind_speeds is required for standard_atmosphere_wind envType.")
+        for wind_speed in ensure_list(env_config.standard_atmosphere_wind_speeds):
+            standard_env_wind = Environment(max_expected_height=max_expected_height_asl)
+            standard_env_wind.set_location(latitude=latitude, longitude=longitude)
+            standard_env_wind.set_elevation(elevation)
+            standard_env_wind.set_date(date, timezone=timezone)
+
+            # Seeding with the speed gives each speed its own fixed profile, independent of the other list entries.
+            rng = np.random.default_rng([WIND_PROFILE_SEED, round(wind_speed * 1000)])
+            # One random speed per height level from the ground to the top of the model
+            heights_asl = np.arange(elevation, max_expected_height_asl + WIND_PROFILE_STEP_M, WIND_PROFILE_STEP_M)
+            level_speeds = rng.normal(wind_speed, wind_speed * WIND_TURBULENCE_INTENSITY, size=len(heights_asl))
+            # Match the standard OpenRocket env: wind comes from 90° (East), so it blows West and wind_u is negative.
+            wind_u_profile = np.column_stack([heights_asl, -level_speeds])
+            standard_env_wind.set_atmospheric_model(type="custom_atmosphere", wind_u=wind_u_profile, wind_v=0)
+            standard_env_wind.name = f"{wind_speed:g}_m_s_STANDARD_WIND"
+            set_labels(standard_env_wind)
+            environments[standard_env_wind.name] = standard_env_wind
 
     if "custom_atmosphere" in environment_types:
         if not env_config.custom_weather_models:
