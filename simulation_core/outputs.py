@@ -63,6 +63,7 @@ def print_one_fin_set(fin_set: Fins):
 
 def print_one_rocket(rocket: Rocket, rocket_length_m: float):
     print(f"Rocket center of wet mass from tip: {(rocket_length_m - rocket.center_of_mass(0)) * 1000} mm")
+    print(f"Rocket center of mass without motor from tip: {(rocket_length_m - rocket.center_of_mass_without_motor) * 1000} mm")
     rocket.prints.inertia_details()
     # rocket.prints.rocket_geometrical_parameters()
     # rocket.prints.rocket_aerodynamics_quantities()
