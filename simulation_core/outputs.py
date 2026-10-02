@@ -24,6 +24,7 @@ SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", 
 NOTEBOOK_SAVE_TIMEOUT_S = 30
 NOTEBOOK_SAVE_POLL_INTERVAL_S = 0.5
 HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"        # set by run_simulation.py
+MAX_PLOTLY_BUTTONS = 5
 
 
 # =============================================================================
@@ -256,10 +257,11 @@ def add_plotly_buttons(
             args=[{"visible": visibility, "showlegend": showlegend}],
         ))
 
+    use_dropdown = len(buttons) > MAX_PLOTLY_BUTTONS
     figure.update_layout(
         updatemenus=[dict(
-            type="buttons",
-            direction="right",
+            type="dropdown" if use_dropdown else "buttons",
+            direction="down" if use_dropdown else "right",
             buttons=buttons,
             x=0.01,
             xanchor="left",
@@ -291,6 +293,8 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
 
     multiple_envs = len(env_names_ordered) > 1
     env_trace_indices = {name: [] for name in env_names_ordered}
+    all_x_values = []
+    all_y_values = []
 
     # -------------------------------------------------------------------------
     # Simulated flight traces: x, y in local meters from launch; altitude is AGL
@@ -306,10 +310,14 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
             display_name = ", ".join(render_meta_flat(flight._meta))
         else:
             display_name = f"{env_name} | {scenario}"
+        x_values = np.array([flight.x(t) for t in times])
+        y_values = np.array([flight.y(t) for t in times])
+        all_x_values.append(x_values)
+        all_y_values.append(y_values)
         idx = len(figure.data)
         figure.add_trace(go.Scatter3d(
-            x=np.array([flight.x(t) for t in times]),
-            y=np.array([flight.y(t) for t in times]),
+            x=x_values,
+            y=y_values,
             z=np.array([flight.altitude(t) for t in times]),
             mode="lines",
             name=display_name,
@@ -368,6 +376,8 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
 
     if gnss_traces:
         for trace in gnss_traces.values():
+            all_x_values.append(np.asarray(trace["x"], dtype=float))
+            all_y_values.append(np.asarray(trace["y"], dtype=float))
             idx = len(figure.data)
             figure.add_trace(go.Scatter3d(
                 x=trace["x"], y=trace["y"], z=trace["z"],
@@ -406,11 +416,18 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
             figure.data[idx].visible = False
         add_plotly_buttons(figure, mode_trace_indices, always_visible_indices)
 
+    # give all plots the same horizontal scale for better comparison, with a 5% margin around the largest range
+    all_x = np.concatenate(all_x_values)
+    all_y = np.concatenate(all_y_values)
+    half_span = 1.05 * max(np.ptp(all_x), np.ptp(all_y)) / 2
+    x_center = (all_x.max() + all_x.min()) / 2
+    y_center = (all_y.max() + all_y.min()) / 2
+
     figure.update_layout(
         title="3D Trajectory Comparison",
         scene=dict(
-            xaxis_title="East / West [m]",
-            yaxis_title="North / South [m]",
+            xaxis=dict(title="East / West [m]", range=[x_center - half_span, x_center + half_span]),
+            yaxis=dict(title="North / South [m]", range=[y_center - half_span, y_center + half_span]),
             zaxis_title="Altitude AGL [m]",
             aspectmode="cube",
             camera=dict(
