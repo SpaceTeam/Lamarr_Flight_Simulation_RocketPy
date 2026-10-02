@@ -3,6 +3,8 @@ Output and post-processing helpers for the RocketPy simulation backend.
 """
 
 import csv
+import os
+import time
 from pathlib import Path
 
 import nbformat
@@ -19,6 +21,9 @@ from simulation_core.utils import *
 from simulation_core.custom_print_and_plot_functions import CustomPlots, CustomPrints
 from simulation_core.config_schema import SimParams, RocketConfig
 SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", "matched": "purple", "payload": "blue"}
+NOTEBOOK_SAVE_TIMEOUT_S = 30
+NOTEBOOK_SAVE_POLL_INTERVAL_S = 0.5
+HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"        # set by run_simulation.py
 
 
 # =============================================================================
@@ -472,8 +477,13 @@ def export_all_trajectory_csv(params: SimParams):
 
 def export_notebook_to_html(notebook_path, output_path=None):
     """Export a Jupyter notebook with its current outputs to a self-contained HTML file.
-    Save the notebook first so the file on disk reflects the current state.
-    """
+    The notebook must be saved first! Either by autosave or by pressing Ctrl+S.
+    Needs to be called in the last cell of the notebook and have its own cell."""
+    # Headless runs (run_simulation.py) have no editor that saves the file.
+    if os.environ.get(HEADLESS_ENV_VAR):
+        print("Headless run: report.html is written by run_simulation.py.")
+        return None
+
     notebook_path = Path(notebook_path)
 
     if output_path is None:
@@ -481,7 +491,21 @@ def export_notebook_to_html(notebook_path, output_path=None):
 
     output_path = Path(output_path)
 
+    # Wait for save: all earlier cells finished before this call, so any save after this moment contains their outputs.
+    call_time = time.time()
+    while notebook_path.stat().st_mtime <= call_time:
+        if time.time() - call_time > NOTEBOOK_SAVE_TIMEOUT_S:
+            raise TimeoutError(f"{notebook_path.name} was not saved within {NOTEBOOK_SAVE_TIMEOUT_S} s; turn on autosave or press Ctrl+S. "
+                               "report.html not written!")
+        time.sleep(NOTEBOOK_SAVE_POLL_INTERVAL_S)
+
     nb = nbformat.read(notebook_path, as_version=4)
+
+    # The export cell's own saved output is still from the previous run, so leave it out of the report.
+    for cell in nb.cells:
+        if cell.cell_type == "code" and "export_notebook_to_html(" in cell.source:
+            cell.outputs = []
+
     html_body, _ = HTMLExporter(theme="dark").from_notebook_node(nb)
     output_path.write_text(html_body, encoding="utf-8")
 

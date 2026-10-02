@@ -7,6 +7,7 @@ prints its text output while it runs and writes the rendered notebook to project
 Only the Streamlit app uses it. If needed, it can also be run in the terminal from the repo folder:
     python streamlit_app/run_simulation.py ALBATROSS
 """
+import os
 import re
 import sys
 import warnings
@@ -25,6 +26,8 @@ PROJECTS_DIR = REPO_DIR / "projects"
 REPORT_FILE_NAME = "report.html"
 # The notebook line that selects the project, e.g. PROJECT = "ALBATROSS".
 PROJECT_LINE_PATTERN = re.compile(r"^PROJECT = .*$", re.MULTILINE)
+# Tells the notebook kernel it runs headless, so outputs.export_notebook_to_html skips its export (it would wait for an editor save).
+HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"
 # Lines starting with this prefix report progress ("PROGRESS: 3/9 Environments Initialization"); app.py turns them into a progress bar.
 PROGRESS_PREFIX = "PROGRESS:"
 # Prefix of the short error line of a failing cell ("ERROR: OpenMeteoRequestsError: ..."); app.py shows it in its failure message.
@@ -70,6 +73,8 @@ def run_project(project: str) -> Path:
         heading_by_cell_index[cell_index] = current_heading
     code_cell_indices = [cell_index for cell_index, cell in enumerate(notebook.cells) if cell.cell_type == "code"]
 
+    # The kernel inherits this process's environment; this script writes the report itself from the executed notebook.
+    os.environ[HEADLESS_ENV_VAR] = "1"
     client = NotebookClient(
         notebook, timeout=None, resources={"metadata": {"path": str(REPO_DIR)}}, extra_arguments=["--IPKernelApp.log_level=ERROR"]
     )
@@ -81,7 +86,6 @@ def run_project(project: str) -> Path:
         client.execute()
     finally:
         # Write the report even after an error, so the output up to the failing cell can be inspected.
-        # This overwrites the report of the notebook's own last cell, which exports the saved file on disk, not this run.
         html_body, _ = HTMLExporter(theme="dark").from_notebook_node(notebook)
         report_path.write_text(html_body, encoding="utf-8")
         print(f"Report written to {report_path}", flush=True)
