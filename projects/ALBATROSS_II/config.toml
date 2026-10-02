@@ -33,7 +33,7 @@ length = 2255  # todo: update with real value (estimated)
 total_CG_without_motor_from_tip = 1146.301  # todo: update with real value (estimated)
 diameter = 133
 moment_of_intertia_Z = 0.014163  # todo: update with real value (estimated)
-moment_of_intertia_XY = 2.009095  # todo: update with real value (estimated)
+moment_of_intertia_XY = 2.007878  # todo: update with real value (estimated)
 power_off_drag = "power_off_drag.csv"
 power_on_drag = "power_on_drag.csv"
 
