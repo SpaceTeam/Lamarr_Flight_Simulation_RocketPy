@@ -699,11 +699,11 @@ def print_variation_stats(params: SimParams):
     if not has_rocket_component_variations(params.config):
         return
 
-    headers = ["Environment", "Config", "Thrust to weight ratio\n@ rail exit", "rail exit velocity\n[m/s]", 
-               "stability @ rail exit\n[cal]", 
-               "apogee AGL\n[m]",
+    headers = ["Environment", "Config", "Thrust to weight\nratio @ rail exit", "rail exit\nvelocity [m/s]", 
+               "stability\n@ rail exit [cal]", 
+               "apogee\nAGL [m]",
                "Impact speed\n[m/s]",
-               "Landing distance from launch\n[m]"]
+               "Landing distance\nfrom launch [m]"]
     add_drogue_stats = False
     rows = []
 
@@ -741,7 +741,7 @@ def print_variation_stats(params: SimParams):
         return
 
     if add_drogue_stats:
-        headers.append("avg speed in drogue phase\n[m/s]")
+        headers.append("avg speed in\ndrogue phase [m/s]")
         
     printmd("## Variation stats for nominal flights")
     print(tabulate(rows, headers=headers, tablefmt="simple", colalign=("left", "left", "right", "right", "right", "right", "right", "right", "right")))
