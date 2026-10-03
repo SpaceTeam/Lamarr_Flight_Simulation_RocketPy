@@ -13,7 +13,6 @@ Open tasks for the RocketPy flight simulation.
 
 ### Simulation features
 
-- Offline mode: run a normal simulation using existing weather CSVs by using RocketPy reanalysis. Reason: possibly no internet at launch site.
 - Result sanity checks: warn when the stability margin is too low or the simulation produces other implausible values. Log a possible reason.
 - Standalone vs. variation check: compare a standalone simulation with the variation simulation using single values to make sure both return the same results. Standalone simulations are still needed for sending them to launch day organisators.
 - Standardize one solid and one liquid standalone version. 

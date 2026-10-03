@@ -705,7 +705,7 @@ def create_flight(params: SimParams):
         Ascent is simulated once per environment and mass, and reused by that mass's scenario flights.
         The payload flight starts at that apogee.
     - A flight parameter is varied (rail length, heading, inclination, ...): one flight per scenario, per environment and variation. 
-    - Reanalysis environment: only "nominal"; the reanalysis adds an optional matched flight later.
+    - Reanalysis environment: selected scenarios for each reanalysis file; the reanalysis later adds an optional matched flight to the nominal one.
 
     User can select which scenarios to simulate in params.config.scenarios ("nominal" is required); "no_main" only if a drogue is configured.
     Results are saved in Flight objects and go to params.runtime.flights_by_env.
@@ -729,12 +729,10 @@ def create_flight(params: SimParams):
     only_nominal_variation = has_rocket_component_variations(params.config)
     rebuild_rocket = only_nominal_variation
 
+    scenarios_to_build = ["nominal"] if only_nominal_variation else selected_scenarios
     has_drogue_base = params.config.parachutes.drogue is not None
-    if only_nominal_variation:
-        scenarios_per_combo = 1
-    else:
-        # no_main is only simulated when there is a drogue to fall back on.
-        scenarios_per_combo = len([name for name in selected_scenarios if name != "no_main" or has_drogue_base])
+    # no_main is only simulated when there is a drogue to fall back on.
+    scenarios_per_combo = len([name for name in scenarios_to_build if name != "no_main" or has_drogue_base])
     # Ascent is simulated separately only when several descent scenarios reuse it, or when a deployable payload needs it.
     reuse_ascent_flights = (has_variations(params.config) and scenarios_per_combo > 1) or has_payload
 
@@ -745,16 +743,9 @@ def create_flight(params: SimParams):
     combinations = list(generate_config_combinations(params.config))
     total = len(combinations)
 
-    # Reanalysis environments without variations only get the nominal flight (the matched flight is added separately).
-    nominal_only_envs = {
-        env_name for env_name in environments
-        if only_nominal_variation or (env_name.startswith("Reanalysis") and not has_variations(params.config))
-    }
     # Each combination produces one scenario set per environment, plus an ascent per environment in reuse mode.
-    flights_per_combo = sum(1 if env_name in nominal_only_envs else scenarios_per_combo for env_name in environments)
-    if reuse_ascent_flights:
-        flights_per_combo += len(environments)
-    total_flights = total * flights_per_combo
+    flights_per_environment = scenarios_per_combo + 1 if reuse_ascent_flights else scenarios_per_combo
+    total_flights = total * len(environments) * flights_per_environment
 
     progress = display({"text/plain": f"Flight 0/{total_flights}"}, raw=True, display_id=True)
     finished_flights = 0
@@ -777,7 +768,7 @@ def create_flight(params: SimParams):
 
         flight_config = combo_config.flight
         payload_mass_total = combo_config.payload.mass_total if isinstance(combo_config.payload.mass_total, (int, float)) else 0
-        scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, selected_scenarios, payload_mass_total)
+        scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, scenarios_to_build, payload_mass_total)
 
         meta = build_variation_meta(params.config, combo_config)
         meta_suffix = " - " + ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else ""
@@ -802,13 +793,7 @@ def create_flight(params: SimParams):
                 finished_flights += 1
                 progress.update({"text/plain": f"Flight {finished_flights}/{total_flights}: {env_name} | ascent{meta_suffix}"}, raw=True)
 
-            scenarios_for_env = (
-                {"nominal": scenario_rockets["nominal"]}
-                if env_name in nominal_only_envs
-                else scenario_rockets
-            )
-
-            for scenario_name, rocket in scenarios_for_env.items():
+            for scenario_name, rocket in scenario_rockets.items():
                 # print(f"scenario_rockets={scenario_rockets}")
                 flight_options = {
                     "rocket": rocket,

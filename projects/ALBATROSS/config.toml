@@ -2,6 +2,7 @@
 # Hover a key for its meaning and optional unit (Tombi); TOML syntax and variations: see README.md.
 project = "ALBATROSS"
 output_level = 2
+scenarios = ["nominal"]
 
 [environment]
 # date = "tomorrow_08_local"
