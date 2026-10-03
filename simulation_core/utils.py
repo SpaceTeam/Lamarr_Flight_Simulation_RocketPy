@@ -11,6 +11,9 @@ from IPython.display import Markdown, display
 from pydantic import BaseModel
 from simulation_core.config_schema import Config, SimParams, ZonesConfig, PAIRED_VARIATIONS, accepts_variation
 
+FLIGHT_MAX_TIME_S = 3600            # RocketPy's 600 s default cuts off long descents (e.g. main at apogee)
+GROUND_HIT_TOLERANCE_M = 1.0        # final altitude AGL below which a flight counts as landed
+
 
 def printmd(string):
     """Print text as Markdown in a Jupyter notebook."""
@@ -215,6 +218,15 @@ def ensure_list(obj):
     if isinstance(obj, (list, tuple, set)):
         return list(obj)
     return [obj]
+
+
+# =============================================================================
+# Flight checks
+# =============================================================================
+
+def flight_reached_ground(flight) -> bool:
+    """Return True when the flight ended on the ground, False when it was cut off in the air (e.g. by max_time)."""
+    return flight.altitude(flight.t_final) < GROUND_HIT_TOLERANCE_M
 
 
 # =============================================================================

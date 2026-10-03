@@ -4,6 +4,7 @@ RocketPy simulation backend.
 
 import copy
 import datetime
+import warnings
 from math import pi
 from pathlib import Path
 
@@ -814,12 +815,20 @@ def create_flight(params: SimParams):
                     "inclination": flight_config.inclination,
                     "heading": flight_config.heading,
                     "terminate_on_apogee": False,
+                    "max_time": FLIGHT_MAX_TIME_S,
                     "name": f"{env_name}_{scenario_name}",
                 }
                 if ascent_flight is not None:
                     flight_options["initial_solution"] = ascent_flight
 
                 flight = Flight(**flight_options)
+                # A flight still in the air at t_final has no valid impact point, so landing/safety results would be wrong
+                if not flight_reached_ground(flight):
+                    warnings.warn(
+                        f"{flight.name}{meta_suffix} did not reach the ground within max_time={FLIGHT_MAX_TIME_S} s "
+                        f"(altitude {flight.altitude(flight.t_final):.0f} m AGL at t={flight.t_final:.0f} s); "
+                        f"impact point, landing distance and safety results for this flight are invalid."
+                    )
                 tag_variation(flight, meta)
                 scenario_set[scenario_name] = flight
                 finished_flights += 1

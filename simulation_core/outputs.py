@@ -19,13 +19,14 @@ from rocketpy.simulation import FlightDataExporter
 from rocketpy import Flight, Environment, Motor, Fins, Rocket
 
 from simulation_core.utils import *
-from simulation_core.custom_print_and_plot_functions import CustomPlots, CustomPrints, get_inflation_shock
+from simulation_core.custom_print_and_plot_functions import CustomPlots, CustomPrints, get_shock_at_parachute_deployment, get_speed_at_parachute_deployment
 from simulation_core.config_schema import SimParams, RocketConfig
 SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", "matched": "purple", "payload": "blue"}
 NOTEBOOK_SAVE_TIMEOUT_S = 30
 NOTEBOOK_SAVE_POLL_INTERVAL_S = 0.5
 HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"        # set by run_simulation.py
 MAX_PLOTLY_BUTTONS = 5
+SUPERSONIC_MACH = 1.2
 
 
 # =============================================================================
@@ -700,11 +701,12 @@ def print_variation_stats(params: SimParams):
         return
 
     headers = ["Environment", "Config", "Thrust to weight\nratio @ rail exit", "rail exit\nvelocity [m/s]", 
-               "stability\n@ rail exit [cal]", 
+               "stability\n@ rail exit [cal]",
+               "max instability in\nsupersonic region [cal]",
                "apogee\nAGL [m]",
                "Impact\nspeed [m/s]",
                "Landing distance\nfrom launch [m]"]
-    add_drogue_stats = False
+    add_main_speed = False
     parachute_names = []
     rows = []
 
@@ -719,38 +721,40 @@ def print_variation_stats(params: SimParams):
         t_w = flight.rocket.motor.thrust(t_rail) / (flight.rocket.total_mass(t_rail) * 9.81)
         v_rail = flight.out_of_rail_velocity
         stability = flight.stability_margin(t_rail)
+
+        # max instability in supersonic region
+        if flight.max_mach_number > SUPERSONIC_MACH:
+            stability_at_max_speed = round(flight.stability_margin(flight.max_speed_time), 2)
+        else:
+            stability_at_max_speed = "-"
         apogee_agl = flight.apogee - flight.env.elevation
         landing_distance = np.hypot(flight.x_impact, flight.y_impact)
         
-        row_values = [flight.env.name, config_str, round(t_w, 2), round(v_rail, 1), round(stability, 2), round(apogee_agl), round(abs(flight.impact_velocity), 2), 
+        row_values = [flight.env.name, config_str, round(t_w, 2), round(v_rail, 1), round(stability, 2), stability_at_max_speed, round(apogee_agl), round(abs(flight.impact_velocity), 2), 
                       round(landing_distance)]
         
-        # average vertical speed in drogue phase
         opening_times = {parachute.name: trigger_time + parachute.lag for trigger_time, parachute in flight.parachute_events}
         
-        # Shock around inflation for each parachute (nominal flights all deploy the same parachutes)
-        for inflation_time in opening_times.values():
-            row_values.append(round(get_inflation_shock(flight, inflation_time), 2))
+        # Shock around deployment for each parachute (nominal flights all deploy the same parachutes)
+        for deployment_time in opening_times.values():
+            row_values.append(round(get_shock_at_parachute_deployment(flight, deployment_time), 2))
         parachute_names = list(opening_times)
         
-        drogue_start = opening_times.get("drogue")
-        if drogue_start:
-            drogue_end = opening_times.get("main", flight.t_final)
-            time_samples = np.linspace(drogue_start, drogue_end, 1000)      # 1000 evenly spaced samples over the drogue phase
-            speed = np.array([flight.speed(time) for time in time_samples], dtype=float)
-            average_drogue_speed = abs(speed.mean())
-            row_values.append(round(average_drogue_speed, 2))
-            add_drogue_stats = True
+        # speed @ main deployment
+        main_deployment_time = opening_times.get("main")
+        if main_deployment_time:
+            row_values.append(round(get_speed_at_parachute_deployment(flight, main_deployment_time), 2))
+            add_main_speed = True
 
         rows.append(row_values)
 
     if not rows:
         return
 
-    headers.extend(f"{name} shock\n@ inflation [g]" for name in parachute_names)
+    headers.extend(f"{name} shock\n@ deployment [g]" for name in parachute_names)
     
-    if add_drogue_stats:
-        headers.append("avg speed in\ndrogue phase [m/s]")
+    if add_main_speed:
+        headers.append("speed @\nmain deployment [m/s]")
 
     # Markdown tables can't hold line breaks: headers get spaces, multi-line cells (config) get HTML <br> breaks
     single_line_headers = [header.replace("\n", " ") for header in headers]

@@ -639,6 +639,7 @@ def create_matched_flight(
         heading=nominal_flight.heading,
         initial_solution=new_state,
         terminate_on_apogee=False,
+        max_time=FLIGHT_MAX_TIME_S,
         name=f"{nominal_flight.env.name}_matched",
     )
 

@@ -149,6 +149,7 @@ def create_payload_flight(params: SimParams):
             inclination=nominal_flight.inclination,
             heading=nominal_flight.heading,
             terminate_on_apogee=False,
+            max_time=FLIGHT_MAX_TIME_S,
             initial_solution=initial_solution,
             name="Payload",
         )
