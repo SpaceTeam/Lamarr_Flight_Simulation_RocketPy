@@ -42,6 +42,8 @@ DEBUG = False
 WIND_PROFILE_STEP_M = 200       # height spacing of wind levels
 WIND_PROFILE_SEED = 42          # fixed seed so every run gets the same wind profiles and results stay comparable
 WIND_TURBULENCE_INTENSITY = 0.1     # standard deviation of varied wind speed, as a fraction of the wind speed
+# Display metadata key of the flight counter; streamlit_app/run_simulation.py reads it to show a live flight progress bar.
+FLIGHT_PROGRESS_METADATA_KEY = "flight_progress"
 
 
 # =============================================================================
@@ -747,7 +749,13 @@ def create_flight(params: SimParams):
     flights_per_environment = scenarios_per_combo + 1 if reuse_ascent_flights else scenarios_per_combo
     total_flights = total * len(environments) * flights_per_environment
 
-    progress = display({"text/plain": f"Flight 0/{total_flights}"}, raw=True, display_id=True)
+    # The metadata [finished, total] lets the Streamlit runner draw a progress bar without parsing the text.
+    progress = display(
+        {"text/plain": f"Flight 0/{total_flights}"},
+        metadata={FLIGHT_PROGRESS_METADATA_KEY: [0, total_flights]},
+        raw=True,
+        display_id=True,
+    )
     finished_flights = 0
 
     # create one flight per scenario per environment; reuse ascent flight when configured
@@ -791,7 +799,11 @@ def create_flight(params: SimParams):
                 tag_variation(ascent_flight, meta)
                 ascent_flights_by_env[env_name].append(ascent_flight)
                 finished_flights += 1
-                progress.update({"text/plain": f"Flight {finished_flights}/{total_flights}: {env_name} | ascent{meta_suffix}"}, raw=True)
+                progress.update(
+                    {"text/plain": f"Flight {finished_flights}/{total_flights}: {env_name} | ascent{meta_suffix}"},
+                    metadata={FLIGHT_PROGRESS_METADATA_KEY: [finished_flights, total_flights]},
+                    raw=True,
+                )
 
             for scenario_name, rocket in scenario_rockets.items():
                 # print(f"scenario_rockets={scenario_rockets}")
@@ -811,11 +823,19 @@ def create_flight(params: SimParams):
                 tag_variation(flight, meta)
                 scenario_set[scenario_name] = flight
                 finished_flights += 1
-                progress.update({"text/plain": f"Flight {finished_flights}/{total_flights}: {env_name} | {scenario_name}{meta_suffix}"}, raw=True)
+                progress.update(
+                    {"text/plain": f"Flight {finished_flights}/{total_flights}: {env_name} | {scenario_name}{meta_suffix}"},
+                    metadata={FLIGHT_PROGRESS_METADATA_KEY: [finished_flights, total_flights]},
+                    raw=True,
+                )
 
             flights_by_env[env_name].append(scenario_set)
 
-    progress.update({"text/plain": f"{finished_flights}/{total_flights} flights simulated"}, raw=True)
+    progress.update(
+        {"text/plain": f"{finished_flights}/{total_flights} flights simulated"},
+        metadata={FLIGHT_PROGRESS_METADATA_KEY: [finished_flights, total_flights]},
+        raw=True,
+    )
 
     params.runtime.flights_by_env = flights_by_env
     params.runtime.scenario_sets = [s for sets in flights_by_env.values() for s in sets]

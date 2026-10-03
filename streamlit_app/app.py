@@ -29,7 +29,7 @@ python_paths = [path for path in os.environ.get("PYTHONPATH", "").split(os.paths
 if str(REPO_DIR) not in python_paths:
     os.environ["PYTHONPATH"] = os.pathsep.join([str(REPO_DIR), *python_paths])
 
-from streamlit_app.run_simulation import ERROR_PREFIX, PROGRESS_PREFIX, PROJECTS_DIR, REPORT_FILE_NAME
+from streamlit_app.run_simulation import ERROR_PREFIX, FLIGHT_PROGRESS_PREFIX, PROGRESS_PREFIX, PROJECTS_DIR, REPORT_FILE_NAME
 from simulation_core.config_schema import Config, ZonesConfig
 from simulation_core.kml_zones import EXCLUSION_KEYWORD, LAUNCH_RAIL_NAME, format_zones, read_kml_zones
 from streamlit_app.config_writer import read_comments, update_config_file, write_config_file
@@ -229,6 +229,7 @@ def run_simulation(project: str, button_slot: DeltaGenerator) -> None:
     # Replace the Run button with Stop: clicking it reruns the script, which interrupts this function and the finally below kills the process.
     button_slot.button("Stop simulation", icon=":material/stop:", key="stop_run")
     progress_bar = st.progress(0.0, text="Starting the notebook kernel...")
+    flight_progress_slot = st.empty()
     log_area = st.empty()
     output_lines = []
     error_message = None
@@ -250,11 +251,17 @@ def run_simulation(project: str, button_slot: DeltaGenerator) -> None:
         for line in process.stdout:
             # Keep the traceback text, drop its color codes (the saved log is shown the same way after the run).
             line = ANSI_COLOR_CODE_PATTERN.sub("", line)
-            if line.startswith(PROGRESS_PREFIX):
-                # "PROGRESS: 3/9 Environments Initialization" -> progress bar at 3/9 with the step name.
-                counter, _, step_name = line.removeprefix(PROGRESS_PREFIX).strip().partition(" ")
-                done_steps, total_steps = (int(number) for number in counter.split("/"))
-                progress_bar.progress(done_steps / total_steps, text=f"Step {counter}: {step_name}")
+            if line.startswith((PROGRESS_PREFIX, FLIGHT_PROGRESS_PREFIX)):
+                # "PROGRESS: 3/9 Environments Initialization" -> prefix "PROGRESS:", counter "3/9" and label; same for flights.
+                prefix, _, counter_and_label = line.strip().partition(" ")
+                counter, _, label = counter_and_label.partition(" ")
+                done_count, total_count = (int(number) for number in counter.split("/"))
+                if prefix == PROGRESS_PREFIX:
+                    progress_bar.progress(done_count / total_count, text=f"Step {counter}: {label}")
+                    # A new step starts, so the flight bar of the previous step is no longer relevant.
+                    flight_progress_slot.empty()
+                else:
+                    flight_progress_slot.progress(done_count / total_count, text=label)
                 continue
             if line.startswith(ERROR_PREFIX):
                 # "ERROR: OpenMeteoRequestsError: ..." -> remembered for the failure message, logged without the prefix.

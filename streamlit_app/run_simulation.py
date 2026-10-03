@@ -21,15 +21,17 @@ from nbconvert import HTMLExporter
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 NOTEBOOK_PATH = REPO_DIR / "jupyternb" / "simulation_orchestration.ipynb"
-# Folder that holds one subfolder per project (config.toml, zones.toml, inputs and outputs).
 PROJECTS_DIR = REPO_DIR / "projects"
 REPORT_FILE_NAME = "report.html"
-# The notebook line that selects the project, e.g. PROJECT = "ALBATROSS".
-PROJECT_LINE_PATTERN = re.compile(r"^PROJECT = .*$", re.MULTILINE)
+PROJECT_LINE_PATTERN = re.compile(r"^PROJECT = .*$", re.MULTILINE)      # selects the project
 # Tells the notebook kernel it runs headless, so outputs.export_notebook_to_html skips its export (it would wait for an editor save).
 HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"
 # Lines starting with this prefix report progress ("PROGRESS: 3/9 Environments Initialization"); app.py turns them into a progress bar.
 PROGRESS_PREFIX = "PROGRESS:"
+# Lines with this prefix report the flight counter while a cell runs ("FLIGHT_PROGRESS: 3/12 Flight 3/12: ..."); app.py shows a second bar.
+FLIGHT_PROGRESS_PREFIX = "FLIGHT_PROGRESS:"
+# Display metadata key the simulation puts on its flight counter ([finished, total]); must match simulation_core/simulation.py.
+FLIGHT_PROGRESS_METADATA_KEY = "flight_progress"
 # Prefix of the short error line of a failing cell ("ERROR: OpenMeteoRequestsError: ..."); app.py shows it in its failure message.
 ERROR_PREFIX = "ERROR:"
 
@@ -54,6 +56,20 @@ def print_cell_output(cell, **_) -> None:
             print(f"{ERROR_PREFIX} {output.ename}: {output.evalue}", flush=True)
 
 
+class LiveNotebookClient(NotebookClient):
+    """NotebookClient that prints the flight counter as soon as it changes."""
+
+    def process_message(self, msg: dict, cell, cell_index: int):
+        """Print a "FLIGHT_PROGRESS: ..." line for each flight counter update, then let nbclient handle the message."""
+        if msg["msg_type"] in ("display_data", "update_display_data"):
+            content = msg["content"]
+            flight_progress = (content.get("metadata") or {}).get(FLIGHT_PROGRESS_METADATA_KEY)
+            if flight_progress is not None:
+                finished_flights, total_flights = flight_progress
+                print(f"{FLIGHT_PROGRESS_PREFIX} {finished_flights}/{total_flights} {content['data']['text/plain']}", flush=True)
+        return super().process_message(msg, cell, cell_index)
+
+
 def run_project(project: str) -> Path:
     """Execute the orchestration notebook for one project and write the result to <project>/report.html; returns the report path."""
     notebook = nbformat.read(NOTEBOOK_PATH, as_version=4)
@@ -75,7 +91,7 @@ def run_project(project: str) -> Path:
 
     # The kernel inherits this process's environment; this script writes the report itself from the executed notebook.
     os.environ[HEADLESS_ENV_VAR] = "1"
-    client = NotebookClient(
+    client = LiveNotebookClient(
         notebook, timeout=None, resources={"metadata": {"path": str(REPO_DIR)}}, extra_arguments=["--IPKernelApp.log_level=ERROR"]
     )
     client.on_cell_start = partial(print_progress, code_cell_indices=code_cell_indices, heading_by_cell_index=heading_by_cell_index)
