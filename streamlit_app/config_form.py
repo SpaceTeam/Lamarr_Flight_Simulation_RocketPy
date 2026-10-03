@@ -22,7 +22,7 @@ from simulation_core.config_schema import docstring_summary
 
 
 EMPTY_CHOICE = ""       # entry for leaving an optional choice empty (the key is then left out of the file).
-FIELDS_WITHOUT_COMMENT = {"project", "output_level"}
+FIELDS_WITHOUT_COMMENT = {"project", "output_level", "scenarios"}
 REQUIRED_MARK = r" \*"
 
 
