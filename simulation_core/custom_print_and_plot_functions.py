@@ -8,6 +8,28 @@ from rocketpy import SolidMotor, LiquidMotor, HybridMotor, Rocket, Flight, Parac
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 
+GRAVITY = 9.81                    # m/s²
+INFLATION_WINDOW_S = 0.25
+
+
+# =============================================================================
+# Flight metrics
+# =============================================================================
+
+def get_inflation_time_samples(flight: Flight, inflation_time: float) -> np.ndarray:
+    """Return the simulation time steps within ±INFLATION_WINDOW_S around the parachute inflation time."""
+    time_samples = np.asarray(flight.time, dtype=float)
+    time_mask = (inflation_time - INFLATION_WINDOW_S <= time_samples) & (time_samples <= inflation_time + INFLATION_WINDOW_S)
+    return time_samples[time_mask]
+
+
+def get_inflation_shock(flight: Flight, inflation_time: float) -> float:
+    """Return the peak acceleration in g within ±INFLATION_WINDOW_S around the parachute inflation time."""
+    inflation_time_samples = get_inflation_time_samples(flight, inflation_time)
+    acceleration_values = np.array([flight.acceleration(time) for time in inflation_time_samples], dtype=float)
+    return np.max(acceleration_values) / GRAVITY
+
+
 class CustomPrints:
     """
     Store rocket simulation objects and provide reusable custom printing methods.
@@ -79,26 +101,21 @@ class CustomPrints:
             altitude_asl = self.get_altitude_asl(inflation_time)
             altitude_agl = self.get_altitude_agl(inflation_time)
 
-            time_samples = np.asarray(self.flight_forecast.time, dtype=float)
-            time_mask = ((inflation_time - 0.25 <= time_samples) & (time_samples <= inflation_time + 0.25))
-            inflation_time_samples = time_samples[time_mask]
+            # Shock is the peak total acceleration around inflation; convert back to m/s² for the acceleration line
+            shock_g = get_inflation_shock(self.flight_forecast, inflation_time)
+            max_acceleration = shock_g * GRAVITY
 
-            acceleration_values = np.array([self.flight_forecast.acceleration(time) for time in inflation_time_samples], dtype=float)
+            inflation_time_samples = get_inflation_time_samples(self.flight_forecast, inflation_time)
             az_values = np.array([self.flight_forecast.az(time) for time in inflation_time_samples], dtype=float)
-
-            max_acceleration = np.max(acceleration_values)
             max_vertical_acceleration = np.max(az_values)
-
-            gravity = 9.81
-            shock_g = max_acceleration / gravity
 
             print(f"Parachute: {parachute.name}")
             print(f"    Altitude at inflation: {altitude_asl:.3f} m (ASL) | {altitude_agl:.3f} m (AGL)")
             print(f"    Ejection time: {ejection_time:.3f} s")
             print(f"    Inflation time: {inflation_time:.3f} s")
-            print(f"    Max acceleration: {max_acceleration:.3f} m/s², max in ±0.25 s around inflation")
-            print(f"    Max vertical acceleration: {max_vertical_acceleration:.3f} m/s², max in ±0.25 s around inflation")
-            print(f"    Shock: {shock_g:.3f} g, max in ±0.25 s around inflation\n")
+            print(f"    Max acceleration: {max_acceleration:.3f} m/s², max in ±{INFLATION_WINDOW_S} s around inflation")
+            print(f"    Max vertical acceleration: {max_vertical_acceleration:.3f} m/s², max in ±{INFLATION_WINDOW_S} s around inflation")
+            print(f"    Shock: {shock_g:.3f} g, max in ±{INFLATION_WINDOW_S} s around inflation\n")
                 
 
     def impact_coordinates(self):

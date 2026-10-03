@@ -19,7 +19,7 @@ from rocketpy.simulation import FlightDataExporter
 from rocketpy import Flight, Environment, Motor, Fins, Rocket
 
 from simulation_core.utils import *
-from simulation_core.custom_print_and_plot_functions import CustomPlots, CustomPrints
+from simulation_core.custom_print_and_plot_functions import CustomPlots, CustomPrints, get_inflation_shock
 from simulation_core.config_schema import SimParams, RocketConfig
 SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", "matched": "purple", "payload": "blue"}
 NOTEBOOK_SAVE_TIMEOUT_S = 30
@@ -702,9 +702,10 @@ def print_variation_stats(params: SimParams):
     headers = ["Environment", "Config", "Thrust to weight\nratio @ rail exit", "rail exit\nvelocity [m/s]", 
                "stability\n@ rail exit [cal]", 
                "apogee\nAGL [m]",
-               "Impact speed\n[m/s]",
+               "Impact\nspeed [m/s]",
                "Landing distance\nfrom launch [m]"]
     add_drogue_stats = False
+    parachute_names = []
     rows = []
 
     nominal_flights = [scenario_set["nominal"] for scenario_set in params.runtime.scenario_sets if "nominal" in scenario_set]
@@ -713,7 +714,7 @@ def print_variation_stats(params: SimParams):
 
     for flight in nominal_flights:
         meta = getattr(flight, "_meta", {})
-        config_str = ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else "—"
+        config_str = ",\n".join(f"{k}={v}" for k, v in meta.items()) if meta else "—"
         t_rail = flight.out_of_rail_time
         t_w = flight.rocket.motor.thrust(t_rail) / (flight.rocket.total_mass(t_rail) * 9.81)
         v_rail = flight.out_of_rail_velocity
@@ -726,6 +727,12 @@ def print_variation_stats(params: SimParams):
         
         # average vertical speed in drogue phase
         opening_times = {parachute.name: trigger_time + parachute.lag for trigger_time, parachute in flight.parachute_events}
+        
+        # Shock around inflation for each parachute (nominal flights all deploy the same parachutes)
+        for inflation_time in opening_times.values():
+            row_values.append(round(get_inflation_shock(flight, inflation_time), 2))
+        parachute_names = list(opening_times)
+        
         drogue_start = opening_times.get("drogue")
         if drogue_start:
             drogue_end = opening_times.get("main", flight.t_final)
@@ -734,22 +741,28 @@ def print_variation_stats(params: SimParams):
             average_drogue_speed = abs(speed.mean())
             row_values.append(round(average_drogue_speed, 2))
             add_drogue_stats = True
-            
+
         rows.append(row_values)
 
     if not rows:
         return
 
+    headers.extend(f"{name} shock\n@ inflation [g]" for name in parachute_names)
+    
     if add_drogue_stats:
         headers.append("avg speed in\ndrogue phase [m/s]")
-        
+
+    # Markdown tables can't hold line breaks: headers get spaces, multi-line cells (config) get HTML <br> breaks
+    single_line_headers = [header.replace("\n", " ") for header in headers]
+    markdown_rows = [[value.replace("\n", "<br>") if isinstance(value, str) else value for value in row] for row in rows]
+
     printmd("## Variation stats for nominal flights")
-    print(tabulate(rows, headers=headers, tablefmt="simple", colalign=("left", "left", "right", "right", "right", "right", "right", "right", "right")))
+    column_alignment = ("left", "left") + ("right",) * (len(headers) - 2)
+    printmd(tabulate(markdown_rows, headers=single_line_headers, tablefmt="pipe", colalign=column_alignment))
 
     # Export table to excel
     excel_path = params.project_path / "variation_stats.xlsx"
-    excel_headers = [header.replace("\n", " ") for header in headers]
-    pd.DataFrame(rows, columns=excel_headers).to_excel(excel_path, index=False)
+    pd.DataFrame(rows, columns=single_line_headers).to_excel(excel_path, index=False)
     print(f"\nExported to: {excel_path}")
 
 
