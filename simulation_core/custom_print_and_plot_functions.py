@@ -636,7 +636,7 @@ class CustomPlots:
             # Mach(t) from the flight, then CP(Mach(t))
             mach_number = np.array([flight.mach_number(time) for time in time_samples], dtype=float)
             cp_position = np.array([rocket.cp_position(mach) for mach in mach_number], dtype=float) * 1000
-            stability_margin = np.array([flight.stability_margin(time) for time in time_samples], dtype=float)
+            stability_margin = np.array([rocket.stability_margin(mach, time) for mach, time in zip(mach_number, time_samples)], dtype=float)
 
             if use_openrocket_coordinates:
                 rocket_length = rocket_config["total_length"]

@@ -21,7 +21,8 @@ from rocketpy import Flight, Environment, Motor, Fins, Rocket
 from simulation_core.utils import *
 from simulation_core.custom_print_and_plot_functions import CustomPlots, CustomPrints, get_shock_at_parachute_deployment, get_speed_at_parachute_deployment
 from simulation_core.config_schema import SimParams, RocketConfig
-SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", "matched": "purple", "payload": "blue"}
+from simulation_core.reanalysis import stitch_ascent_and_descent
+SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", "matched": "purple", "payload": "blue", "ascent": "gray"}
 SAFETY_LABELS = ("safe", "suboptimal", "unsafe")
 NOTEBOOK_SAVE_TIMEOUT_S = 30
 NOTEBOOK_SAVE_POLL_INTERVAL_S = 0.5
@@ -179,7 +180,9 @@ def plot_all_flights_with_custom_plots(params: SimParams, scenario_sets):
     rocket_configs = []
 
     for scenario_set in scenario_sets:
-        for scenario_name, flight in scenario_set.items():
+        for scenario_name, scenario_flight in scenario_set.items():
+            # flights from a shared ascent need that ascent stitched in front
+            flight = full_trajectory_flight(scenario_flight)
             env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
 
             # When variation metadata is present, include the varied settings in the label.
@@ -189,10 +192,14 @@ def plot_all_flights_with_custom_plots(params: SimParams, scenario_sets):
             else:
                 label = f"{env_name} | {scenario_name}"
 
+            # CG and stability are only plotted up to apogee, so use the ascent's rocket (with payload mass) when there is one
+            ascent_flight = getattr(scenario_flight, "ascent_flight", None)
+            ascent_rocket = ascent_flight.rocket if ascent_flight is not None else flight.rocket
+
             flights.append(flight)
-            motors.append(flight.rocket.motor)
+            motors.append(ascent_rocket.motor)
             plot_titles.append(label)
-            rockets.append(flight.rocket)
+            rockets.append(ascent_rocket)
             rocket_configs.append({"total_length": params.config.rocket.length})
 
     if len(flights) > _CUSTOM_PLOTS_FLIGHT_LIMIT:
@@ -304,7 +311,8 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
     # -------------------------------------------------------------------------
     # Simulated flight traces: x, y in local meters from launch; altitude is AGL
     # -------------------------------------------------------------------------
-    for flight in flights:
+    shared_ascents = list(dict.fromkeys(flight.ascent_flight for flight in flights if getattr(flight, "ascent_flight", None) is not None))
+    for flight in [*shared_ascents, *flights]:
         env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
         scenario = next((scenario for scenario in SCENARIO_COLORS if scenario in (getattr(flight, "name", "") or "")), "other")
         times = np.asarray(flight.time)
@@ -312,7 +320,7 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
         color = next((c for scenario, c in SCENARIO_COLORS.items() if scenario in (getattr(flight, "name", "") or "")), None)
         # Use flat metadata label when available — flight.name may contain newlines from obj_to_pretty_label.
         if hasattr(flight, "_meta") and flight._meta:
-            display_name = ", ".join(render_meta_flat(flight._meta))
+            display_name = f"{', '.join(render_meta_flat(flight._meta))} | {scenario}"
         else:
             display_name = f"{env_name} | {scenario}"
         x_values = np.array([flight.x(t) for t in times])
@@ -455,14 +463,21 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
 # Exports
 # =============================================================================
 
+def full_trajectory_flight(flight: Flight) -> Flight:
+    """Return the flight from launch to landing; a flight that started at a shared ascent's apogee gets that ascent stitched in front."""
+    ascent_flight = getattr(flight, "ascent_flight", None)
+    return stitch_ascent_and_descent(ascent_flight, flight) if ascent_flight is not None else flight
+
+
 def export_all_kml(params: SimParams):
-    """Export KML files for all flights."""
+    """Export KML files for all flights, each from launch to landing."""
     exported_files = []
     project_path = params.project_path
     ensure_project_folders(project_path)
 
     for i, scenario_set in enumerate(params.runtime.scenario_sets, start=1):
-        for flight in scenario_set.values():
+        for scenario_flight in scenario_set.values():
+            flight = full_trajectory_flight(scenario_flight)
             file_name = Path(f"flight_{i}_{flight.filename_label}.kml")
             file_path = project_path / "trajectory_kml" / file_name
             FlightDataExporter(flight).export_kml(file_name=file_path, altitude_mode="relativetoground")
@@ -472,14 +487,15 @@ def export_all_kml(params: SimParams):
 
 
 def export_all_trajectory_csv(params: SimParams):
-    """Export one CSV per flight with columns latitude, longitude, altitude (m AGL) at every ODE time step.
+    """Export one CSV per flight from launch to landing with columns latitude, longitude, altitude (m AGL) at every ODE time step.
     By request for WARR, maybe useful, otherwise remove later."""
     exported_files = []
     project_path = params.project_path
     ensure_project_folders(project_path)
 
     for i, scenario_set in enumerate(params.runtime.scenario_sets, start=1):
-        for scenario_name, flight in scenario_set.items():
+        for scenario_name, scenario_flight in scenario_set.items():
+            flight = full_trajectory_flight(scenario_flight)
             times = flight.latitude.source[:, 0]
 
             file_name = Path(f"flight_{i}_{scenario_name}_{flight.filename_label}.csv")
