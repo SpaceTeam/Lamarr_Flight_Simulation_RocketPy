@@ -89,3 +89,4 @@ diameter = 66
 length = 115
 moment_of_intertia_Z = 0.01
 moment_of_intertia_XY = 0.01
+# center_of_gravity_from_tip = 
