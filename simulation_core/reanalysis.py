@@ -10,7 +10,7 @@ import inspect
 from functools import cached_property
 
 import numpy as np
-from rocketpy import EmptyMotor, Function, Flight, LiquidMotor, Motor, Parachute, SolidMotor
+from rocketpy import EmptyMotor, Function, Flight, LiquidMotor, Motor, Parachute, Rocket, SolidMotor
 from rocketpy.simulation.flight_data_importer import FlightDataImporter
 from pyproj import Geod
 from scipy.spatial.transform import Rotation, Slerp
@@ -320,6 +320,47 @@ def rebuild_parachute_from_overrides(nominal_parachute: Parachute, overrides: di
     return Parachute(**parachute_options)
 
 
+def apply_matched_rocket_overrides(rocket: Rocket, motor_overrides: dict, parachute_overrides: dict, params: SimParams) -> Rocket:
+    """Return a copy of the rocket with the matched-flight motor and parachute overrides applied, or the rocket itself 
+    without overrides."""
+    # Deep-copy the rocket only if overrides will mutate it; otherwise share nominal's
+    if not motor_overrides and not parachute_overrides:
+        return rocket
+    matched_rocket = copy.deepcopy(rocket)
+
+    if motor_overrides:
+        rebuilt_motor = rebuild_motor_from_overrides(matched_rocket.motor, motor_overrides, params=params)
+        # Swap via EmptyMotor to satisfy RocketPy's "only one motor" guard; save motor_position first
+        # because it lives on the rocket, not the motor.
+        motor_position = matched_rocket.motor_position
+        matched_rocket.motor = EmptyMotor()
+        matched_rocket.add_motor(rebuilt_motor, position=motor_position)
+
+    # Rebuild named parachutes with merged params; enabled=False drops them
+    if parachute_overrides:
+        rebuilt_parachutes = []
+        matched_parachute_names = set()
+        for parachute in matched_rocket.parachutes:
+            if parachute.name in parachute_overrides:
+                matched_parachute_names.add(parachute.name)
+                rebuilt = rebuild_parachute_from_overrides(parachute, parachute_overrides[parachute.name])
+                if rebuilt is None:
+                    continue
+                rebuilt_parachutes.append(rebuilt)
+            else:
+                rebuilt_parachutes.append(parachute)
+        unknown_parachute_names = set(parachute_overrides) - matched_parachute_names
+        if unknown_parachute_names:
+            available_names = [parachute.name for parachute in matched_rocket.parachutes]
+            raise ValueError(
+                f"Unknown matched-flight parachute override(s): {sorted(unknown_parachute_names)}. "
+                f"Available parachutes: {available_names}"
+            )
+        matched_rocket.parachutes = rebuilt_parachutes
+
+    return matched_rocket
+
+
 def cats_quaternion_at(params: SimParams, t):
     """Load the CATS Vega attitude quaternion (xyzw, normalized) at time t by spherical interpolation."""
     orientation_file = params.project_path / CATS_FOLDER / "orientationInfo.csv"
@@ -413,18 +454,26 @@ def _warm_matched_flight_cache(flight: Flight):
 
 
 def _splice_at(nominal_arr, matched_arr, splice_time):
-    """Return nominal samples with time <= splice_time stacked above matched samples with time >= splice_time."""
+    """Return nominal samples with time < splice_time stacked above matched samples with time >= splice_time."""
     # 1D time array: values are the timestamps themselves
     if nominal_arr.ndim == 1:
-        return np.concatenate([nominal_arr[nominal_arr <= splice_time], matched_arr[matched_arr >= splice_time]])
+        combined = np.concatenate([nominal_arr[nominal_arr < splice_time], matched_arr[matched_arr >= splice_time]])
+        times = combined
     # 2D state/source array: time lives in column 0
-    return np.vstack([nominal_arr[nominal_arr[:, 0] <= splice_time], matched_arr[matched_arr[:, 0] >= splice_time]])
+    else:
+        combined = np.vstack([nominal_arr[nominal_arr[:, 0] < splice_time], matched_arr[matched_arr[:, 0] >= splice_time]])
+        times = combined[:, 0]
+
+    # RocketPy writes a second row at the same time when an event fires there (e.g. a parachute triggering on the first
+    # step of a flight started after apogee); keep only the last row of each repeated time so splines stay solvable
+    is_last_of_its_time = np.append(np.diff(times) != 0, True)
+    return combined[is_last_of_its_time]
 
 
 def splice_matched_flight_in_place(spliced_flight: Flight, nominal_flight: Flight, splice_time):
     """
     Mutate a (copy of a) matched Flight so its solution/time arrays and post-process data cover the
-    spliced trajectory: nominal samples for t <= splice_time + matched samples for t >= splice_time.
+    spliced trajectory: nominal samples for t < splice_time + matched samples for t >= splice_time.
     All funcify Functions and cached_property derivatives inherited from the matched cache are dropped
     so they lazily rebuild from the spliced primitives on next access.
     """
@@ -446,6 +495,12 @@ def splice_matched_flight_in_place(spliced_flight: Flight, nominal_flight: Fligh
         rail_exit_time = find_rail_exit_time(solution_arr[:, 0], solution_arr[:, 1:4], effective_rail_length)
         if rail_exit_time is not None:
             spliced_flight.out_of_rail_time = rail_exit_time
+
+    # RocketPy stores apogee values during simulation (apogee_time 0 = not reached); if nominal already passed apogee
+    # before the splice, matched only saw the descent and its "apogee" is just its starting altitude, so take nominal's.
+    if 0 < nominal_flight.apogee_time <= splice_time:
+        for apogee_attribute in ("apogee_state", "apogee_time", "apogee_x", "apogee_y", "apogee"):
+            setattr(spliced_flight, apogee_attribute, getattr(nominal_flight, apogee_attribute))
 
     # Splice __evaluate_post_process (the cached Nx13 ndarray that feeds ax/ay/az/alpha/R/M/net_thrust).
     # Matched's was warmed before the shallow copy; force nominal's via .acceleration access so we have both halves.
@@ -475,6 +530,16 @@ def splice_matched_flight_in_place(spliced_flight: Flight, nominal_flight: Fligh
     # reading matched's values instead of spliced's. Rebuild them with the spliced flight as their target.
     spliced_flight.prints = type(spliced_flight.prints)(spliced_flight)
     spliced_flight.plots = type(spliced_flight.plots)(spliced_flight)
+
+
+def stitch_ascent_and_descent(ascent_flight: Flight, descent_flight: Flight) -> Flight:
+    """Join an ascent flight and the descent flight that started from its apogee into one launch-to-landing flight.
+    Each half keeps the rocket it was simulated with, so a payload mass drop at apogee is preserved."""
+    # The splice copies the descent's post-process cache, so it has to be computed before the shallow copy
+    _warm_matched_flight_cache(descent_flight)
+    stitched_flight = copy.copy(descent_flight)
+    splice_matched_flight_in_place(stitched_flight, ascent_flight, descent_flight.t_initial)
+    return stitched_flight
 
 
 def create_matched_flight(
@@ -596,52 +661,44 @@ def create_matched_flight(
         initial_solution[11], initial_solution[12], initial_solution[13],
     ]
 
-    # Deep-copy the rocket only if overrides will mutate it; otherwise share nominal's
-    matched_rocket = nominal_flight.rocket
-    if motor_overrides or parachute_overrides:
-        matched_rocket = copy.deepcopy(nominal_flight.rocket)
+    shared_flight_options = {
+        "environment": nominal_flight.env,
+        "rail_length": nominal_flight.rail_length,
+        "inclination": nominal_flight.inclination,
+        "heading": nominal_flight.heading,
+        "max_time_step": FLIGHT_MAX_TIME_STEP_S,
+    }
+    descent_rocket = apply_matched_rocket_overrides(nominal_flight.rocket, motor_overrides, parachute_overrides, params)
 
-    if motor_overrides:
-        rebuilt_motor = rebuild_motor_from_overrides(matched_rocket.motor, motor_overrides, params=params)
-        # Swap via EmptyMotor to satisfy RocketPy's "only one motor" guard; save motor_position first
-        # because it lives on the rocket, not the motor.
-        motor_position = matched_rocket.motor_position
-        matched_rocket.motor = EmptyMotor()
-        matched_rocket.add_motor(rebuilt_motor, position=motor_position)
-
-    # Rebuild named parachutes with merged params; enabled=False drops them
-    if parachute_overrides:
-        rebuilt_parachutes = []
-        matched_parachute_names = set()
-        for parachute in matched_rocket.parachutes:
-            if parachute.name in parachute_overrides:
-                matched_parachute_names.add(parachute.name)
-                rebuilt = rebuild_parachute_from_overrides(parachute, parachute_overrides[parachute.name])
-                if rebuilt is None:
-                    continue
-                rebuilt_parachutes.append(rebuilt)
-            else:
-                rebuilt_parachutes.append(parachute)
-        unknown_parachute_names = set(parachute_overrides) - matched_parachute_names
-        if unknown_parachute_names:
-            available_names = [parachute.name for parachute in matched_rocket.parachutes]
-            raise ValueError(
-                f"Unknown matched-flight parachute override(s): {sorted(unknown_parachute_names)}. "
-                f"Available parachutes: {available_names}"
-            )
-        matched_rocket.parachutes = rebuilt_parachutes
-
-    matched_flight = Flight(
-        rocket=matched_rocket,
-        environment=nominal_flight.env,
-        rail_length=nominal_flight.rail_length,
-        inclination=nominal_flight.inclination,
-        heading=nominal_flight.heading,
-        initial_solution=new_state,
-        terminate_on_apogee=False,
-        max_time=FLIGHT_MAX_TIME_S,
-        name=f"{nominal_flight.env.name}_matched",
-    )
+    # A nominal stitched from a shared ascent switches rocket at apogee (e.g. payload separation);
+    # a matched flight branching off before that apogee makes the same switch via its own ascent + descent.
+    nominal_ascent = getattr(nominal_flight, "ascent_flight", None)
+    if nominal_ascent is not None and t_match < nominal_ascent.t_final:
+        matched_ascent = Flight(
+            rocket=apply_matched_rocket_overrides(nominal_ascent.rocket, motor_overrides, parachute_overrides, params),
+            initial_solution=new_state,
+            terminate_on_apogee=True,
+            name=f"{nominal_flight.env.name}_matched_ascent",
+            **shared_flight_options,
+        )
+        matched_descent = Flight(
+            rocket=descent_rocket,
+            initial_solution=matched_ascent,
+            terminate_on_apogee=False,
+            max_time=FLIGHT_MAX_TIME_S,
+            name=f"{nominal_flight.env.name}_matched",
+            **shared_flight_options,
+        )
+        matched_flight = stitch_ascent_and_descent(matched_ascent, matched_descent)
+    else:
+        matched_flight = Flight(
+            rocket=descent_rocket,
+            initial_solution=new_state,
+            terminate_on_apogee=False,
+            max_time=FLIGHT_MAX_TIME_S,
+            name=f"{nominal_flight.env.name}_matched",
+            **shared_flight_options,
+        )
 
     tag_variation(matched_flight, getattr(nominal_flight, "_meta", {}))
     matched_flight.splice_time = t_match
@@ -1223,6 +1280,10 @@ def build_reanalysis_artifacts(params: SimParams):
     for env_name in reanalysis_envs:
         scenario_sets = params.runtime.flights_by_env[env_name]
         nominal_flight = scenario_sets[0]["nominal"]
+        # A nominal that started at a shared ascent's apogee has no launch phase; stitch the ascent in front for the comparison
+        if getattr(nominal_flight, "ascent_flight", None) is not None:
+            nominal_flight = stitch_ascent_and_descent(nominal_flight.ascent_flight, nominal_flight)
+            scenario_sets[0]["nominal"] = nominal_flight
 
         flight_computer_data_by_env[env_name] = data
         flight_computer_impacts.extend(compute_flight_computer_impacts(data, nominal_flight.env))
