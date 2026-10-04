@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from simulation_core.config_schema import Config, SimParams, ZonesConfig, PAIRED_VARIATIONS, accepts_variation
 
 FLIGHT_MAX_TIME_S = 3600            # RocketPy's 600 s default cuts off long descents (e.g. main at apogee)
+FLIGHT_MAX_TIME_STEP_S = 0.1        # upper limit per solver step; the uncapped first step (~max_time/1000 = 3.6 s) can jump over a whole motor burn
 GROUND_HIT_TOLERANCE_M = 1.0        # final altitude AGL below which a flight counts as landed
 
 

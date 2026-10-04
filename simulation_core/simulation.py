@@ -798,6 +798,7 @@ def create_flight(params: SimParams):
                     inclination=flight_config.inclination,
                     heading=flight_config.heading,
                     terminate_on_apogee=True,
+                    max_time_step=FLIGHT_MAX_TIME_STEP_S,
                     name=f"{env_name}_ascent",
                 )
                 tag_variation(ascent_flight, meta)
@@ -819,6 +820,7 @@ def create_flight(params: SimParams):
                     "heading": flight_config.heading,
                     "terminate_on_apogee": False,
                     "max_time": FLIGHT_MAX_TIME_S,
+                    "max_time_step": FLIGHT_MAX_TIME_STEP_S,
                     "name": f"{env_name}_{scenario_name}",
                 }
                 if ascent_flight is not None:
@@ -833,6 +835,8 @@ def create_flight(params: SimParams):
                         f"impact point, landing distance and safety results for this flight are invalid."
                     )
                 tag_variation(flight, meta)
+                # A flight started from apogee has no rail/burn phase; keep its ascent so rail-exit stats can be read from it
+                flight.ascent_flight = ascent_flight
                 scenario_set[scenario_name] = flight
                 finished_flights += 1
                 progress.update(
