@@ -778,6 +778,9 @@ def create_flight(params: SimParams):
         flight_config = combo_config.flight
         payload_mass_total = combo_config.payload.mass_total if isinstance(combo_config.payload.mass_total, (int, float)) else 0
         scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, scenarios_to_build, payload_mass_total)
+        # RocketPy adds parachute pressure data to the rocket object during flight. A fresh copy for each combination flight avoids 
+        # accumulating parachute data from previous flights (memory leak).
+        ascent_rocket = copy.deepcopy(combo_params.runtime.rocket) if reuse_ascent_flights else None
 
         meta = build_variation_meta(params.config, combo_config)
         meta_suffix = " - " + ", ".join(f"{k}={v}" for k, v in meta.items()) if meta else ""
@@ -789,7 +792,7 @@ def create_flight(params: SimParams):
             if reuse_ascent_flights:
                 # First simulate the full-mass rocket only up to apogee
                 ascent_flight = Flight(
-                    rocket=combo_params.runtime.rocket,
+                    rocket=ascent_rocket,
                     environment=environment,
                     rail_length=flight_config.rail_length,
                     inclination=flight_config.inclination,
