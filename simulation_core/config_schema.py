@@ -969,14 +969,10 @@ class RuntimeParams(BaseModel):
         Unsafe matched rocket flights (safety analysis).
     unsafe_configurations: 
         List of (env, heading, inclination) tuples classified as unsafe.
-    unsafe_details:
-        List of detail dicts for unsafe configurations.
     suboptimal_rocket_nominal, suboptimal_rocket_no_main, suboptimal_rocket_ballistic, suboptimal_rocket_matched:
         Flights of headings that are safe but land in a suboptimal zone (safety analysis).
     suboptimal_configurations:
         List of (env, heading, inclination) tuples classified as suboptimal.
-    suboptimal_details:
-        List of detail dicts for configurations landing in a suboptimal zone.
     safe_payload:
         Safe payload flights (safety analysis).
     suboptimal_payload:
@@ -1013,13 +1009,11 @@ class RuntimeParams(BaseModel):
     unsafe_rocket_ballistic: Optional[list] = None
     unsafe_rocket_matched: Optional[list] = None
     unsafe_configurations: Optional[list] = None
-    unsafe_details: Optional[list] = None
     suboptimal_rocket_nominal: Optional[list] = None
     suboptimal_rocket_no_main: Optional[list] = None
     suboptimal_rocket_ballistic: Optional[list] = None
     suboptimal_rocket_matched: Optional[list] = None
     suboptimal_configurations: Optional[list] = None
-    suboptimal_details: Optional[list] = None
     safe_payload: Optional[list] = None
     suboptimal_payload: Optional[list] = None
     unsafe_payload: Optional[list] = None
