@@ -1119,7 +1119,11 @@ def plot_wind_speed_and_heading(environment: Environment, max_expected_height_as
         - wind_v: northward component of the physical wind velocity vector
 
     Wind_speed: magnitude of the wind velocity vector.
-    
+
+    Wind direction is where the wind comes from:
+        0°   = wind comes from north
+        90°  = wind comes from east
+
     max_expected_height_asl needs to be passed to the function instead of using Environment.max_expected_height,
     since RocketPy ignores it for some environments and uses the default 80.000 km.
     
@@ -1133,17 +1137,19 @@ def plot_wind_speed_and_heading(environment: Environment, max_expected_height_as
     wind_speed = np.array([environment.wind_speed(z) for z in height_samples], dtype=float)
     wind_u = np.array([environment.wind_velocity_x(z) for z in height_samples], dtype=float)
     wind_v = np.array([environment.wind_velocity_y(z) for z in height_samples], dtype=float)
+    wind_direction = np.array([environment.wind_direction(z) for z in height_samples], dtype=float)
 
     fig, axes = plt.subplots(
         nrows=1,
-        ncols=2,
-        figsize=(6, 4.5),
+        ncols=3,
+        figsize=(9, 4.5),
         sharey=True,
         constrained_layout=True,
     )
 
     speed_axis = axes[0]
-    heading_axis = axes[1]
+    direction_axis = axes[1]
+    heading_axis = axes[2]
 
     # -------------------------------------------------------------------------
     # Left plot: wind speed
@@ -1153,6 +1159,21 @@ def plot_wind_speed_and_heading(environment: Environment, max_expected_height_as
     speed_axis.set_xlabel("Wind speed [m/s]")
     speed_axis.set_ylabel("Height Above Sea Level [m]")
     speed_axis.grid(True)
+
+    # -------------------------------------------------------------------------
+    # Middle plot: wind direction in degrees
+    # -------------------------------------------------------------------------
+    # Insert a gap wherever the direction wraps around 0°/360° so the line doesn't jump across the plot.
+    wrap_indices = np.where(np.abs(np.diff(wind_direction)) > 180.0)[0] + 1
+    direction_line = np.insert(wind_direction, wrap_indices, np.nan)
+    height_line = np.insert(height_samples, wrap_indices, np.nan)
+
+    direction_axis.plot(direction_line, height_line)
+
+    direction_axis.set_xlabel("Wind direction [°]")
+    direction_axis.set_xlim(0, 360)
+    direction_axis.set_xticks([0, 45, 90, 135, 180, 225, 270, 315, 360], ["0°\nN", "", "90°\nE", "", "180°\nS", "", "270°\nW", "", "360°\nN"])
+    direction_axis.grid(True)
 
     # -------------------------------------------------------------------------
     # Right plot: wind heading as arrows
@@ -1216,11 +1237,13 @@ def plot_wind_speed_and_heading(environment: Environment, max_expected_height_as
     # -------------------------------------------------------------------------
     # Launch site elevation reference line
     # -------------------------------------------------------------------------
-    speed_axis.axhline(
-        environment.elevation,
-        linestyle="--",
-        linewidth=1.5,
-    )
+    # Draw the elevation line on all three plots, but label it only on the speed plot.
+    for axis in axes:
+        axis.axhline(
+            environment.elevation,
+            linestyle="--",
+            linewidth=1.5,
+        )
 
     speed_axis.annotate(
         f"Elevation Launch Site: {environment.elevation:.1f} m",
