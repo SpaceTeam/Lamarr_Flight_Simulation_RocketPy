@@ -2253,6 +2253,39 @@
           "default": null,
           "description": "Payload moment of inertia about the roll axis [kg·m²]. Required when mass_total > 0.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
           "title": "Moment Of Intertia Z"
+        },
+        "center_from_tip": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Distance of the center of mass of all deployable payloads (mass_total) to the nose tip [mm]. The rocket's CG moves\naccordingly after separation. If omitted, the payload is removed at the rocket's CG, so the CG doesn't change.\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
+          "title": "Center From Tip"
         }
       },
       "title": "PayloadConfig",
@@ -3030,7 +3063,8 @@
         "diameter": null,
         "length": null,
         "moment_of_intertia_XY": null,
-        "moment_of_intertia_Z": null
+        "moment_of_intertia_Z": null,
+        "center_from_tip": null
       }
     },
     "reanalysis": {

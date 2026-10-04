@@ -726,6 +726,9 @@ class PayloadConfig(_Base):
         Payload moment of inertia about the pitch/yaw axes [kg·m²]. Required when mass_total > 0.
     moment_of_intertia_Z
         Payload moment of inertia about the roll axis [kg·m²]. Required when mass_total > 0.
+    center_from_tip
+        Distance of the center of mass of all deployable payloads (mass_total) to the nose tip [mm]. The rocket's CG moves
+        accordingly after separation. If omitted, the payload is removed at the rocket's CG, so the CG doesn't change.
     """
     mass_total: Annotated[float | list[float], FLOAT_RANGE_EXPANSION] = 0.0
     mass: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
@@ -733,6 +736,7 @@ class PayloadConfig(_Base):
     length: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
     moment_of_intertia_XY: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
     moment_of_intertia_Z: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
+    center_from_tip: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
 
 
 # -----------------------------------------------------------------------------

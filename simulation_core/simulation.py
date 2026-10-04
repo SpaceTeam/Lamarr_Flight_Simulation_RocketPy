@@ -777,7 +777,9 @@ def create_flight(params: SimParams):
 
         flight_config = combo_config.flight
         payload_mass_total = combo_config.payload.mass_total if isinstance(combo_config.payload.mass_total, (int, float)) else 0
-        scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, scenarios_to_build, payload_mass_total)
+        payload_center_from_tip = combo_config.payload.center_from_tip
+        payload_position_m = None if payload_center_from_tip is None else get_position_from_tip(payload_center_from_tip, millimeters_to_meters(combo_config.rocket.length))
+        scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, scenarios_to_build, payload_mass_total, payload_position_m)
         # RocketPy adds parachute pressure data to the rocket object during flight. A fresh copy for each combination flight avoids 
         # accumulating parachute data from previous flights (memory leak).
         ascent_rocket = copy.deepcopy(combo_params.runtime.rocket) if reuse_ascent_flights else None
@@ -864,11 +866,11 @@ def create_flight(params: SimParams):
         deployable_payload.create_payload_flight(params)
 
 
-def build_scenario_rockets(base_rocket, has_drogue, scenario_names, payload_mass_total=0):
+def build_scenario_rockets(base_rocket, has_drogue, scenario_names, payload_mass_total=0, payload_position_m=None):
     """Build rocket variants for the selected descent scenarios by deep-copying and trimming the parachute list.
 
     Returns {scenario_name: rocket}; no_main is skipped without a drogue. When payload_mass_total > 0, the payload mass is
-    removed from all scenario rockets before descent is simulated.
+    removed from all scenario rockets before descent is simulated, at payload_position_m (RocketPy coordinates) when given.
     """
     scenario_rockets = {}
     for scenario_name in scenario_names:
@@ -886,8 +888,16 @@ def build_scenario_rockets(base_rocket, has_drogue, scenario_names, payload_mass
     if payload_mass_kg > 0:
         for rocket in scenario_rockets.values():
             # remove payload mass from rocket after separation
-            rocket.mass -= payload_mass_kg
-            if rocket.mass <= 0:
+            remaining_mass_kg = rocket.mass - payload_mass_kg
+            if remaining_mass_kg <= 0:
                 raise ValueError("payload_mass_total must be smaller than the rocket mass.")
+            # Mass-weighted CG of what stays in the rocket; without a payload position the payload leaves at the CG, so it doesn't move
+            if payload_position_m is not None:
+                rocket.center_of_mass_without_motor = (
+                    rocket.center_of_mass_without_motor * rocket.mass - payload_position_m * payload_mass_kg
+                ) / remaining_mass_kg
+            rocket.mass = remaining_mass_kg
+            # RocketPy only recalculates total mass, CG and stability when a motor is added
+            readd_motor(rocket, rocket.motor)
 
     return scenario_rockets

@@ -10,7 +10,7 @@ import inspect
 from functools import cached_property
 
 import numpy as np
-from rocketpy import EmptyMotor, Function, Flight, LiquidMotor, Motor, Parachute, Rocket, SolidMotor
+from rocketpy import Function, Flight, LiquidMotor, Motor, Parachute, Rocket, SolidMotor
 from rocketpy.simulation.flight_data_importer import FlightDataImporter
 from pyproj import Geod
 from scipy.spatial.transform import Rotation, Slerp
@@ -330,11 +330,7 @@ def apply_matched_rocket_overrides(rocket: Rocket, motor_overrides: dict, parach
 
     if motor_overrides:
         rebuilt_motor = rebuild_motor_from_overrides(matched_rocket.motor, motor_overrides, params=params)
-        # Swap via EmptyMotor to satisfy RocketPy's "only one motor" guard; save motor_position first
-        # because it lives on the rocket, not the motor.
-        motor_position = matched_rocket.motor_position
-        matched_rocket.motor = EmptyMotor()
-        matched_rocket.add_motor(rebuilt_motor, position=motor_position)
+        readd_motor(matched_rocket, rebuilt_motor)
 
     # Rebuild named parachutes with merged params; enabled=False drops them
     if parachute_overrides:

@@ -9,6 +9,7 @@ from pathlib import Path
 from IPython import get_ipython
 from IPython.display import Markdown, display
 from pydantic import BaseModel
+from rocketpy import EmptyMotor
 from simulation_core.config_schema import Config, SimParams, ZonesConfig, PAIRED_VARIATIONS, accepts_variation
 
 FLIGHT_MAX_TIME_S = 3600            # RocketPy's 600 s default cuts off long descents (e.g. main at apogee)
@@ -219,6 +220,19 @@ def ensure_list(obj):
     if isinstance(obj, (list, tuple, set)):
         return list(obj)
     return [obj]
+
+
+# =============================================================================
+# Rocket helpers
+# =============================================================================
+
+def readd_motor(rocket, motor):
+    """Attach a motor to a rocket that already has one, so RocketPy recalculates the rocket's mass, CG, inertia and stability."""
+    # RocketPy computes these only when a motor is added and refuses a second motor, so swap via EmptyMotor first;
+    # motor_position lives on the rocket, so it is saved before the swap
+    motor_position = rocket.motor_position
+    rocket.motor = EmptyMotor()
+    rocket.add_motor(motor, position=motor_position)
 
 
 # =============================================================================
