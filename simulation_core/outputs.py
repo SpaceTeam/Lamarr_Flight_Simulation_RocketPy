@@ -565,7 +565,7 @@ def print_configurations(title, configurations):
 
 
 def print_landing_coordinates(params: SimParams, safety_label: str):
-    """Print lat/lon landing coordinates for every flight with the given safety label ("safe" or "suboptimal")."""
+    """Print lat/lon landing coordinates and distance from the launch rail for every flight with the given safety label."""
     printmd(f"## {safety_label.capitalize()} flight details")
 
     # Collect all flights of this safety label with their scenario type label.
@@ -577,7 +577,7 @@ def print_landing_coordinates(params: SimParams, safety_label: str):
         ("payload",   f"{safety_label}_payload"),
     ]
 
-    # Build: {heading: {inclination: {type: [(env_name, lat, lon)]}}}
+    # Build: {heading: {inclination: {type: [(env_name, lat, lon, distance)]}}}
     grouped = {}
 
     for type_label, attr_name in type_keys:
@@ -587,7 +587,8 @@ def print_landing_coordinates(params: SimParams, safety_label: str):
             env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
             lat = flight.latitude(flight.t_final)
             lon = flight.longitude(flight.t_final)
-            grouped.setdefault(heading, {}).setdefault(inclination, {}).setdefault(type_label, []).append((env_name, lat, lon))
+            entry = (env_name, lat, lon, landing_distance(flight))
+            grouped.setdefault(heading, {}).setdefault(inclination, {}).setdefault(type_label, []).append(entry)
 
     if not grouped:
         print("None")
@@ -607,8 +608,52 @@ def print_landing_coordinates(params: SimParams, safety_label: str):
 
                 print(f"    {type_label}:")
 
-                for env_name, lat, lon in sorted(entries, key=lambda item: item[0]):
-                    print(f"      {env_name}: lat={lat}°, lon={lon}°")
+                for env_name, lat, lon, distance in sorted(entries, key=lambda item: item[0]):
+                    print(f"      {env_name}: lat={lat}°, lon={lon}°, distance from launch={distance:.0f} m")
+
+
+def print_landing_distance_summary(params: SimParams):
+    """Print the min and max landing distance from the launch rail per heading and inclination, one column per scenario."""
+    # Pair every flight (rocket scenarios and payload) with its scenario name.
+    flights_with_scenario = [(name, flight) for scenario_set in params.runtime.scenario_sets for name, flight in scenario_set.items()]
+    flights_with_scenario += [("payload", flight) for flight in get_flights(params, "flight_payload")]
+
+    # Build: {(heading, inclination): {scenario: [distance, ...]}}; each list holds one distance per environment.
+    distances_by_config = {}
+    for scenario_name, flight in flights_with_scenario:
+        config_distances = distances_by_config.setdefault((flight.heading, flight.inclination), {})
+        config_distances.setdefault(scenario_name, []).append(landing_distance(flight))
+
+    # SCENARIO_COLORS lists every scenario in display order; only keep the ones that were simulated.
+    scenario_names = [name for name in SCENARIO_COLORS if any(name in by_scenario for by_scenario in distances_by_config.values())]
+    # Safety is decided per heading, so any environment/inclination of that heading gives the same label.
+    safety_by_heading = {heading: label for (_env, heading, _inclination), label in build_safety_by_config(params).items()}
+
+    # Pool every heading and inclination per scenario for the closing "Total" row.
+    total_by_scenario = {}
+    for by_scenario in distances_by_config.values():
+        for scenario_name, distances in by_scenario.items():
+            total_by_scenario.setdefault(scenario_name, []).extend(distances)
+
+    # Each row is (leading cells, {scenario: distances}); the Total row comes last.
+    row_sources = [
+        ([heading, inclination, safety_by_heading.get(heading, "unknown")], by_scenario)
+        for (heading, inclination), by_scenario in sorted(distances_by_config.items())
+    ]
+    row_sources.append((["**Total**", "", ""], total_by_scenario))
+
+    rows = []
+    for leading_cells, by_scenario in row_sources:
+        row = list(leading_cells)
+        for scenario_name in scenario_names:
+            distances = by_scenario.get(scenario_name)
+            row.append(f"{min(distances):.0f} – {max(distances):.0f}" if distances else "–")
+        rows.append(row)
+
+    printmd("## Landing distance from launch rail")
+    printmd("Min - max distance in meters across all environments, per heading and inclination.")
+    column_alignment = ("right", "right", "left") + ("left",) * len(scenario_names)
+    printmd(tabulate(rows, headers=["Heading [°]", "Inclination [°]", "Safety", *scenario_names], tablefmt="pipe", colalign=column_alignment))
 
 
 def print_zone_landing_details(title: str, details: list[dict]):
@@ -653,6 +698,11 @@ def scenario_config_key(flight: Flight):
     """Identifier for the configuration a flight belongs to: (env_name, heading, inclination)."""
     env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
     return (env_name, flight.heading, flight.inclination)
+
+
+def landing_distance(flight: Flight) -> float:
+    """Return the horizontal distance in meters between the launch rail and the flight's impact point."""
+    return float(np.hypot(flight.x_impact, flight.y_impact))
 
 
 def flight_lands_in_zone(flight: Flight, zones: dict):
@@ -729,10 +779,8 @@ def print_variation_stats(params: SimParams):
         else:
             stability_at_max_speed = "-"
         apogee_agl = flight.apogee - flight.env.elevation
-        landing_distance = np.hypot(flight.x_impact, flight.y_impact)
-        
         row_values = [flight.env.name, config_str, round(t_w, 2), round(v_rail, 1), round(stability, 2), stability_at_max_speed, round(apogee_agl), round(abs(flight.impact_velocity), 2), 
-                      round(landing_distance)]
+                      round(landing_distance(flight))]
         
         opening_times = {parachute.name: trigger_time + parachute.lag for trigger_time, parachute in flight.parachute_events}
         
@@ -830,6 +878,7 @@ def calculate_safe_flights(params: SimParams, buffer_zones: dict, suboptimal_zon
     params.runtime.suboptimal_details = [detail for detail in suboptimal_details if detail["heading"] in suboptimal_headings]
 
     print_variation_stats(params)
+    print_landing_distance_summary(params)
     print_configurations("Safe Configurations by Heading", params.runtime.safe_configurations or [])
     print_landing_coordinates(params, "safe")
     if suboptimal_zones:
@@ -949,6 +998,7 @@ def add_mode_flight_traces(
                 safety_by_config.get(scenario_config_key(flight), "unknown"),
                 flight.latitude(flight.t_final),
                 flight.longitude(flight.t_final),
+                landing_distance(flight),
             ]
             for flight in flight_list
         ]
@@ -967,6 +1017,7 @@ def add_mode_flight_traces(
                 "inclination: %{customdata[1]}°<br>"
                 "env: %{customdata[2]}<br>"
                 "impact: (%{x:.1f}, %{y:.1f}) m<br>"
+                "distance from launch: %{customdata[6]:.0f} m<br>"
                 "lat: %{customdata[4]:.5f}°; lon: %{customdata[5]:.5f}°"
                 "<extra></extra>"
             ),
@@ -1044,6 +1095,7 @@ def plot_landing_positions_with_modes(
                 hovertemplate=(
                     f"<b>{impact['label']}</b><br>"
                     "impact: (%{x:.1f}, %{y:.1f}) m<br>"
+                    f"distance from launch rail: {np.hypot(impact['x'], impact['y']):.0f} m<br>"
                     "lat: %{customdata[0]:.5f}°; lon: %{customdata[1]:.5f}°"
                     "<extra></extra>"
                 ),
