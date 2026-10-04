@@ -13,12 +13,12 @@ max_expected_height = 7000
 elevation = 123.8920653  # todo: update when known exactly
 timezone = "Europe/Berlin"
 # envType = ["Windy", "custom_atmosphere"]
-# envType = ["standard_atmosphere_wind"]
-envType = ["reanalysis_custom"]
+envType = ["standard_atmosphere_wind"]
+# envType = ["reanalysis_custom"]
 # windy_weather_models = ["ICONEU"]
 # custom_weather_models = ["icon_d2", "icon_eu"]
-reanalysis_csv = {icon_d2 = "rocketpy_atmosphere_icon_eu_test.csv", icon_eu = "rocketpy_atmosphere_icon_d2_test.csv"}
-# standard_atmosphere_wind_speeds = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+# reanalysis_csv = {icon_d2 = "rocketpy_atmosphere_icon_eu_test.csv", icon_eu = "rocketpy_atmosphere_icon_d2_test.csv"}
+standard_atmosphere_wind_speeds = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 # standard_atmosphere_wind_speeds = 2
 
 [engine]
@@ -35,13 +35,13 @@ center_of_dry_mass_factor = 0.49  # estimated (more weight at nozzle end when ta
 thrust = "Cesaroni_9977M2245-P.eng"
 
 [rocket]
-total_mass_without_motor = 8084  # todo: update with real value (estimated)
+# total_mass_without_motor = 8084  # todo: update with real value (estimated)
 # total_mass_without_motor = [5584, 7584, 8084]       # 0 kg, 2 kg, 2.5 kg payload
-# total_mass_without_motor = [7584, 8084]       # 2 kg, 2.5 kg payload
+total_mass_without_motor = [7584, 8084]       # 2 kg, 2.5 kg payload
 length = 2261  # todo: update with real value (estimated)
-total_CG_without_motor_from_tip = 857.365  # todo: update with real value (estimated)
+# total_CG_without_motor_from_tip = 857.365  # todo: update with real value (estimated)
 # total_CG_without_motor_from_tip = [1100.768, 893.208, 857.365]        # 0 kg, 2 kg, 2.5 kg payload
-# total_CG_without_motor_from_tip = [893.208, 857.365]        # 2 kg, 2.5 kg payload
+total_CG_without_motor_from_tip = [893.208, 857.365]        # 2 kg, 2.5 kg payload
 diameter = 133
 moment_of_intertia_Z = 0.014209  # todo: update with real value (estimated)
 moment_of_intertia_XY = 1.796222  # todo: update with real value (estimated)
@@ -86,6 +86,8 @@ lag = 1  # measured
 
 [flight]
 rail_length = 7  # todo: update and tell people how long the rail has to be for stable flight
-inclination = 85
-heading = [310, 320, 330]  # best in surface wind direction; stops at 350 because 360 is the same as 0
+# inclination = 85
+inclination = 88
+# heading = [310, 320, 330]  # best in surface wind direction; stops at 350 because 360 is the same as 0
+heading = 0
 
