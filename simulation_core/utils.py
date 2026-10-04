@@ -328,12 +328,16 @@ def load_zones(zones_path: Path):
     - buffer_zones: Safety margin zones around exclusion zones, or zones where the rocket should preferably not land,
         such as forests.
 
+    - suboptimal_zones: The buffer zones when `buffer_zones_are_suboptimal_but_safe` is true (buffer_zones is then empty),
+        otherwise empty. Landing there is safe but should preferably be avoided.
+
     - exclusion_zone_safety_margin: Factor used to enlarge exclusion zones when checking whether a flight is unsafe.
 
-    We later mark a flight as unsafe if any trajectory (nominal, no_main, ballistic) enters a buffer zone.
+    We later mark a flight as unsafe if any trajectory (nominal, no_main, ballistic) enters a buffer zone,
+    and as suboptimal if it only enters a suboptimal zone.
     """
     if not zones_path.exists():
-        return {}, {}, 1
+        return {}, {}, {}, 1
 
     with open(zones_path, "rb") as zones_file:
         zones = ZonesConfig.model_validate(tomllib.load(zones_file))
@@ -346,7 +350,10 @@ def load_zones(zones_path: Path):
 
     exclusion_zones = convert(zones.exclusion_zones)
     buffer_zones = convert(zones.buffer_zones)
-    return exclusion_zones, buffer_zones, zones.exclusion_zone_safety_margin
+    # Move the buffer zones into the suboptimal group so they no longer make a heading unsafe
+    if zones.buffer_zones_are_suboptimal_but_safe:
+        return exclusion_zones, {}, buffer_zones, zones.exclusion_zone_safety_margin
+    return exclusion_zones, buffer_zones, {}, zones.exclusion_zone_safety_margin
 
 
 # =============================================================================

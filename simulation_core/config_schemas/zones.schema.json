@@ -49,6 +49,12 @@
       "description": "Factor that enlarges the exclusion zones into extra buffer zones, e.g. 1.3 = 30% larger.",
       "title": "Exclusion Zone Safety Margin",
       "type": "number"
+    },
+    "buffer_zones_are_suboptimal_but_safe": {
+      "default": false,
+      "description": "If true, landings in buffer_zones mark a heading as \"suboptimal\" (still safe) instead of unsafe;\nshown in yellow. The enlarged exclusion zones stay unsafe either way.",
+      "title": "Buffer Zones Are Suboptimal But Safe",
+      "type": "boolean"
     }
   },
   "title": "ZonesConfig",

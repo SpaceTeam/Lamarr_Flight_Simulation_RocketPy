@@ -1,6 +1,7 @@
 #:schema ../../simulation_core/config_schemas/zones.schema.json
 # Coordinates: [distance_m, heading_deg] from the launch rail. heading: 0 = North, 90 = East, clockwise.
 exclusion_zone_safety_margin = 1.2
+buffer_zones_are_suboptimal_but_safe = true
 
 [exclusion_zones]
 Cars = [[736.46, 130.55], [808.14, 143.82], [1035.64, 139.11], [1075.25, 127.37]]

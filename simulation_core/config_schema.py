@@ -888,10 +888,14 @@ class ZonesConfig(_Base):
         A configuration is safe only if every simulated landing is outside every buffer zone.
     exclusion_zone_safety_margin
         Factor that enlarges the exclusion zones into extra buffer zones, e.g. 1.3 = 30% larger.
+    buffer_zones_are_suboptimal_but_safe
+        If true, landings in buffer_zones mark a heading as "suboptimal" (still safe) instead of unsafe;
+        shown in yellow. The enlarged exclusion zones stay unsafe either way.
     """
     exclusion_zones: dict[str, list[_PolarPoint]] = Field(default_factory=dict)
     buffer_zones: dict[str, list[_PolarPoint]] = Field(default_factory=dict)
     exclusion_zone_safety_margin: float = 1.0
+    buffer_zones_are_suboptimal_but_safe: bool = False
 
 
 # =============================================================================
@@ -965,11 +969,19 @@ class RuntimeParams(BaseModel):
         Unsafe matched rocket flights (safety analysis).
     unsafe_configurations: 
         List of (env, heading, inclination) tuples classified as unsafe.
-    unsafe_details: 
+    unsafe_details:
         List of detail dicts for unsafe configurations.
-    safe_payload: 
+    suboptimal_rocket_nominal, suboptimal_rocket_no_main, suboptimal_rocket_ballistic, suboptimal_rocket_matched:
+        Flights of headings that are safe but land in a suboptimal zone (safety analysis).
+    suboptimal_configurations:
+        List of (env, heading, inclination) tuples classified as suboptimal.
+    suboptimal_details:
+        List of detail dicts for configurations landing in a suboptimal zone.
+    safe_payload:
         Safe payload flights (safety analysis).
-    unsafe_payload: 
+    suboptimal_payload:
+        Suboptimal payload flights (safety analysis).
+    unsafe_payload:
         Unsafe payload flights (safety analysis).
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -1002,7 +1014,14 @@ class RuntimeParams(BaseModel):
     unsafe_rocket_matched: Optional[list] = None
     unsafe_configurations: Optional[list] = None
     unsafe_details: Optional[list] = None
+    suboptimal_rocket_nominal: Optional[list] = None
+    suboptimal_rocket_no_main: Optional[list] = None
+    suboptimal_rocket_ballistic: Optional[list] = None
+    suboptimal_rocket_matched: Optional[list] = None
+    suboptimal_configurations: Optional[list] = None
+    suboptimal_details: Optional[list] = None
     safe_payload: Optional[list] = None
+    suboptimal_payload: Optional[list] = None
     unsafe_payload: Optional[list] = None
 
 

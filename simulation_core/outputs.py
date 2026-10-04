@@ -22,6 +22,7 @@ from simulation_core.utils import *
 from simulation_core.custom_print_and_plot_functions import CustomPlots, CustomPrints, get_shock_at_parachute_deployment, get_speed_at_parachute_deployment
 from simulation_core.config_schema import SimParams, RocketConfig
 SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", "matched": "purple", "payload": "blue"}
+SAFETY_LABELS = ("safe", "suboptimal", "unsafe")
 NOTEBOOK_SAVE_TIMEOUT_S = 30
 NOTEBOOK_SAVE_POLL_INTERVAL_S = 0.5
 HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"        # set by run_simulation.py
@@ -563,17 +564,17 @@ def print_configurations(title, configurations):
             print(f"- {environment}: inclinations {sorted(inclinations)}")
 
 
-def print_safe_flight_details(params: SimParams):
-    """Print lat/lon landing coordinates for every safe flight."""
-    printmd("## Safe flight details")
+def print_landing_coordinates(params: SimParams, safety_label: str):
+    """Print lat/lon landing coordinates for every flight with the given safety label ("safe" or "suboptimal")."""
+    printmd(f"## {safety_label.capitalize()} flight details")
 
-    # Collect all safe flights with their scenario type label.
+    # Collect all flights of this safety label with their scenario type label.
     type_keys = [
-        ("nominal",   "safe_rocket_nominal"),
-        ("no_main",   "safe_rocket_no_main"),
-        ("ballistic", "safe_rocket_ballistic"),
-        ("matched",   "safe_rocket_matched"),
-        ("payload",   "safe_payload"),
+        ("nominal",   f"{safety_label}_rocket_nominal"),
+        ("no_main",   f"{safety_label}_rocket_no_main"),
+        ("ballistic", f"{safety_label}_rocket_ballistic"),
+        ("matched",   f"{safety_label}_rocket_matched"),
+        ("payload",   f"{safety_label}_payload"),
     ]
 
     # Build: {heading: {inclination: {type: [(env_name, lat, lon)]}}}
@@ -610,17 +611,17 @@ def print_safe_flight_details(params: SimParams):
                     print(f"      {env_name}: lat={lat}°, lon={lon}°")
 
 
-def print_unsafe_details(unsafe_details):
-    """Print grouped details for every unsafe heading/inclination/environment combination."""
-    printmd("## Unsafe flight details")
+def print_zone_landing_details(title: str, details: list[dict]):
+    """Print which scenarios landed in a zone, grouped by heading, environment and inclination."""
+    printmd(f"## {title}")
 
-    if not unsafe_details:
+    if not details:
         print("None")
         return
 
     grouped = {}
 
-    for detail in unsafe_details:
+    for detail in details:
         heading = detail["heading"]
         environment = detail["environment"]
         grouped.setdefault(heading, {}).setdefault(environment, []).append(detail)
@@ -632,7 +633,7 @@ def print_unsafe_details(unsafe_details):
             print(f"- {environment}:")
 
             for detail in sorted(details, key=lambda item: item["inclination"]):
-                scenarios = ", ".join(detail["unsafe_scenarios"])
+                scenarios = ", ".join(detail["scenarios"])
                 print(f"  inclination {detail['inclination']}: {scenarios}")
 
 
@@ -770,14 +771,40 @@ def print_variation_stats(params: SimParams):
     print(f"\nExported to: {excel_path}")
 
 
-def calculate_safe_flights(params: SimParams, buffer_zones: dict):
-    """Classify all flights as safe or unsafe based on landing zone membership.
+def find_zone_landings(scenario_sets: list[dict], payloads_by_config: dict, zones: dict) -> tuple[set, list[dict]]:
+    """Return the headings where any flight landed inside the zones, plus one detail dict per configuration that did."""
+    headings_in_zone = set()
+    details = []
+
+    for scenario_set in scenario_sets:
+        nominal_flight = scenario_set["nominal"]
+        scenarios_in_zone = [name for name, flight in scenario_set.items() if flight_lands_in_zone(flight, zones)]
+
+        # Include payload flights for the same configuration; a single payload in the zone is enough.
+        payload_flights = payloads_by_config.get(scenario_config_key(nominal_flight), [])
+        if any(flight_lands_in_zone(payload_flight, zones) for payload_flight in payload_flights):
+            scenarios_in_zone.append("payload")
+
+        if scenarios_in_zone:
+            headings_in_zone.add(nominal_flight.heading)
+            details.append({
+                "heading": nominal_flight.heading,
+                "inclination": nominal_flight.inclination,
+                "environment": nominal_flight.env.name if hasattr(nominal_flight.env, "name") else nominal_flight.name,
+                "scenarios": scenarios_in_zone,
+            })
+
+    return headings_in_zone, details
+
+
+def calculate_safe_flights(params: SimParams, buffer_zones: dict, suboptimal_zones: dict):
+    """Classify all flights as safe, suboptimal or unsafe based on landing zone membership.
 
     A heading is unsafe if any scenario (nominal/no_main/ballistic/payload), inclination,
-    or environment caused a landing inside a buffer zone.
+    or environment caused a landing inside a buffer zone; otherwise it is suboptimal if any landed inside a suboptimal zone.
     """
     payload_flights = get_flights(params, "flight_payload")
-    
+
     # Group payload flights by their (env, heading, inclination) for the diagnostic detail list.
     payloads_by_config = {}
     for payload_flight in payload_flights:
@@ -785,94 +812,55 @@ def calculate_safe_flights(params: SimParams, buffer_zones: dict):
 
     scenario_sets = params.runtime.scenario_sets
 
-    # First pass: find which headings have any unsafe scenario, and record diagnostic details.
-    unsafe_headings = set()
-    unsafe_details = []
+    # First pass: find which headings land in each zone type, and record diagnostic details.
+    unsafe_headings, unsafe_details = find_zone_landings(scenario_sets, payloads_by_config, buffer_zones)
+    suboptimal_headings, suboptimal_details = find_zone_landings(scenario_sets, payloads_by_config, suboptimal_zones)
+    # A heading that is unsafe stays unsafe even if it also lands in a suboptimal zone.
+    suboptimal_headings -= unsafe_headings
+    label_by_heading = {heading: "suboptimal" for heading in suboptimal_headings} | {heading: "unsafe" for heading in unsafe_headings}
 
-    for scenario_set in scenario_sets:
-        nominal_flight = scenario_set["nominal"]
-        unsafe_scenarios = []
-
-        for scenario_name, flight in scenario_set.items():
-            if flight_lands_in_zone(flight, buffer_zones):
-                unsafe_scenarios.append(scenario_name)
-
-        # Include payload flights for the same configuration; a single unsafe payload is enough.
-        for payload_flight in payloads_by_config.get(scenario_config_key(nominal_flight), []):
-            if flight_lands_in_zone(payload_flight, buffer_zones):
-                unsafe_scenarios.append("payload")
-                break
-
-        if unsafe_scenarios:
-            unsafe_headings.add(nominal_flight.heading)
-            unsafe_details.append({
-                "heading": nominal_flight.heading,
-                "inclination": nominal_flight.inclination,
-                "environment": nominal_flight.env.name if hasattr(nominal_flight.env, "name") else nominal_flight.name,
-                "unsafe_scenarios": unsafe_scenarios,
-            })
-
-    # Second pass: every scenario_set with an unsafe heading is unsafe, even if its specific
+    # Second pass: every scenario_set and payload flight takes its heading's label, even if its specific
     # (env, inclination) flights all landed outside the zones.
-    safe_scenario_sets = [s for s in scenario_sets if s["nominal"].heading not in unsafe_headings]
-    unsafe_scenario_sets = [s for s in scenario_sets if s["nominal"].heading in unsafe_headings]
+    for safety_label in SAFETY_LABELS:
+        store_safety_results(params, safety_label, [s for s in scenario_sets if label_by_heading.get(s["nominal"].heading, "safe") == safety_label])
+        setattr(params.runtime, f"{safety_label}_payload", [p for p in payload_flights if label_by_heading.get(p.heading, "safe") == safety_label])
 
-    store_safety_results(params, "safe", safe_scenario_sets)
-    store_safety_results(params, "unsafe", unsafe_scenario_sets)
     params.runtime.unsafe_details = unsafe_details
-
-    # Payload flights inherit the heading-level classification.
-    safe_payload_flights = [payload for payload in payload_flights if payload.heading not in unsafe_headings]
-    unsafe_payload_flights = [payload for payload in payload_flights if payload.heading in unsafe_headings]
-    params.runtime.safe_payload = safe_payload_flights
-    params.runtime.unsafe_payload = unsafe_payload_flights
+    # Details of unsafe headings are already listed as unsafe, so only keep the ones that ended up suboptimal.
+    params.runtime.suboptimal_details = [detail for detail in suboptimal_details if detail["heading"] in suboptimal_headings]
 
     print_variation_stats(params)
     print_configurations("Safe Configurations by Heading", params.runtime.safe_configurations or [])
-    print_safe_flight_details(params)
+    print_landing_coordinates(params, "safe")
+    if suboptimal_zones:
+        print_configurations("Suboptimal (but safe) Configurations by Heading", params.runtime.suboptimal_configurations or [])
+        print_landing_coordinates(params, "suboptimal")
+        print_zone_landing_details("Suboptimal zone landing details", params.runtime.suboptimal_details)
     print_configurations("Unsafe Configurations by Heading", params.runtime.unsafe_configurations or [])
-    print_unsafe_details(unsafe_details)
+    print_zone_landing_details("Unsafe flight details", unsafe_details)
 
 
 # =============================================================================
 # Safety plots
 # =============================================================================
 
-def build_safe_unsafe_flight_groups(params: SimParams):
-    """Build safe and unsafe flight-group dicts from params.runtime safety lists."""
-    safe_flight_groups = {
-        "rocket_nominal":  (get_flights(params, "safe_rocket_nominal"),  SCENARIO_COLORS["nominal"]),
-        "rocket_no_main":  (get_flights(params, "safe_rocket_no_main"),  SCENARIO_COLORS["no_main"]),
-        "rocket_ballistic":(get_flights(params, "safe_rocket_ballistic"), SCENARIO_COLORS["ballistic"]),
-        "rocket_matched":  (get_flights(params, "safe_rocket_matched"),  SCENARIO_COLORS["matched"]),
+def build_safety_flight_groups(params: SimParams, safety_label: str):
+    """Build the flight-group dict for one safety label ("safe", "suboptimal" or "unsafe") from params.runtime."""
+    flight_groups = {
+        f"rocket_{scenario}": (get_flights(params, f"{safety_label}_rocket_{scenario}"), SCENARIO_COLORS[scenario])
+        for scenario in ("nominal", "no_main", "ballistic", "matched")
     }
-    unsafe_flight_groups = {
-        "rocket_nominal":  (get_flights(params, "unsafe_rocket_nominal"),  SCENARIO_COLORS["nominal"]),
-        "rocket_no_main":  (get_flights(params, "unsafe_rocket_no_main"),  SCENARIO_COLORS["no_main"]),
-        "rocket_ballistic":(get_flights(params, "unsafe_rocket_ballistic"), SCENARIO_COLORS["ballistic"]),
-        "rocket_matched":  (get_flights(params, "unsafe_rocket_matched"),  SCENARIO_COLORS["matched"]),
-    }
-
-    safe_payload_flights = get_flights(params, "safe_payload")
-    unsafe_payload_flights = get_flights(params, "unsafe_payload")
-    if safe_payload_flights or unsafe_payload_flights:
-        safe_flight_groups["payload_nominal"] = (safe_payload_flights, SCENARIO_COLORS["payload"])
-        unsafe_flight_groups["payload_nominal"] = (unsafe_payload_flights, SCENARIO_COLORS["payload"])
-
-    return safe_flight_groups, unsafe_flight_groups
+    flight_groups["payload_nominal"] = (get_flights(params, f"{safety_label}_payload"), SCENARIO_COLORS["payload"])
+    return flight_groups
 
 
 def build_safety_by_config(params: SimParams):
-    """Build a {(environment, heading, inclination): 'safe'|'unsafe'} map from params.runtime."""
-    safety_by_config = {}
-
-    for configuration in (params.runtime.safe_configurations or []):
-        safety_by_config[configuration] = "safe"
-
-    for configuration in (params.runtime.unsafe_configurations or []):
-        safety_by_config[configuration] = "unsafe"
-
-    return safety_by_config
+    """Build a {(environment, heading, inclination): 'safe'|'suboptimal'|'unsafe'} map from params.runtime."""
+    return {
+        configuration: safety_label
+        for safety_label in SAFETY_LABELS
+        for configuration in (getattr(params.runtime, f"{safety_label}_configurations") or [])
+    }
 
 
 # =============================================================================
@@ -993,6 +981,7 @@ def plot_landing_positions_with_modes(
     params: SimParams,
     exclusion_zones,
     buffer_zones,
+    suboptimal_zones,
     plot_name,
     mode_flight_groups=None,
     safety_by_config=None,
@@ -1008,7 +997,8 @@ def plot_landing_positions_with_modes(
     ensure_project_folders(project_path)
     figure = go.Figure()
 
-    # Plot buffer zones first so they do not visually cover the red exclusion zones.
+    # Plot from least to most critical so the red exclusion zones stay on top.
+    plot_zones(figure, suboptimal_zones, label="Suboptimal zone", color="gold")
     plot_zones(figure, buffer_zones, label="Buffer zone", color="orange")
     plot_zones(figure, exclusion_zones, label="Exclusion zone", color="red")
 
@@ -1104,10 +1094,10 @@ def plot_landing_positions_with_modes(
 # Notebook display mode
 # =============================================================================
 
-def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones):
+def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, suboptimal_zones):
     """Run the notebook display mode that fits the config: a single flight or variations.
 
-    Both modes share the same All/Safe/Unsafe landing-positions plot. Single-flight mode adds a
+    Both modes share the same All/Safe/Suboptimal/Unsafe landing-positions plot. Single-flight mode adds a
     per-flight safety summary, trajectory comparison, and detailed per-scenario prints/plots.
     With variations, the trajectory comparison is only drawn up to _CUSTOM_PLOTS_FLIGHT_LIMIT flights.
     """
@@ -1125,17 +1115,15 @@ def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones):
     if payload_flights:
         all_flight_groups["payload_nominal"] = (payload_flights, SCENARIO_COLORS["payload"])
 
-    calculate_safe_flights(params, buffer_zones)
-
-    safe_flight_groups, unsafe_flight_groups = build_safe_unsafe_flight_groups(params)
+    calculate_safe_flights(params, buffer_zones, suboptimal_zones)
     safety_by_config = build_safety_by_config(params)
 
-    # Only display the Safe/Unsafe buttons when those groups actually contain flights.
+    # Only display a Safe/Suboptimal/Unsafe button when that group actually contains flights.
     mode_flight_groups = {"All": all_flight_groups}
-    if any(flights for flights, _color in safe_flight_groups.values()):
-        mode_flight_groups["Safe"] = safe_flight_groups
-    if any(flights for flights, _color in unsafe_flight_groups.values()):
-        mode_flight_groups["Unsafe"] = unsafe_flight_groups
+    for safety_label in SAFETY_LABELS:
+        flight_groups = build_safety_flight_groups(params, safety_label)
+        if any(flights for flights, _color in flight_groups.values()):
+            mode_flight_groups[safety_label.capitalize()] = flight_groups
 
     flight_computer_impacts = ensure_list(params.runtime.flight_computer_impacts or [])
 
@@ -1143,6 +1131,7 @@ def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones):
         params,
         exclusion_zones,
         buffer_zones,
+        suboptimal_zones,
         plot_name="landing_positions",
         mode_flight_groups=mode_flight_groups,
         safety_by_config=safety_by_config,
