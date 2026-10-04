@@ -361,6 +361,14 @@ def build_profile_from_openmeteo_dwd_icon(
     if hourly_dataframe.empty:
         raise RuntimeError("The API returned no hourly rows. Check launch_time, model, and forecast availability.")
 
+    # Open-Meteo returns nulls instead of an error when the model has no data for this time or location.
+    if hourly_dataframe[hourly_variables].isna().all(axis=None):
+        raise RuntimeError(
+            f"Open-Meteo returned no data from '{weather_model}' for {launch_time} ({timezone}) "
+            f"at lat={latitude}, lon={longitude}. The time is likely beyond the model's forecast horizon "
+            f"(approx. icon_d2: 48 h, icon_eu: 5 days) or the location is outside the model's domain."
+        )
+
     # -----------------------------------------------------------------------
     # Build the profile dataframe from the hourly data
     # -----------------------------------------------------------------------
