@@ -327,8 +327,8 @@ class EnvironmentConfig(_Base):
         - Example: "ECMWF"
     """
     date: Union[Literal["tomorrow_08_local"], _LocalDateTime]
-    latitude: Annotated[float | list[float], FLOAT_RANGE_EXPANSION]
-    longitude: Annotated[float | list[float], FLOAT_RANGE_EXPANSION]
+    latitude: float
+    longitude: float
     max_expected_height: Annotated[float | list[float], FLOAT_RANGE_EXPANSION]
     elevation: Annotated[float | list[float], FLOAT_RANGE_EXPANSION]
     timezone: str
@@ -726,7 +726,7 @@ class PayloadConfig(_Base):
         Payload moment of inertia about the pitch/yaw axes [kg·m²]. Required when mass_total > 0.
     moment_of_intertia_Z
         Payload moment of inertia about the roll axis [kg·m²]. Required when mass_total > 0.
-    center_of_gravity_from_tip
+    CG_from_tip
         Distance of the center of gravity of all deployable payloads (mass_total) to the nose tip [mm]. The rocket's CG moves
         accordingly after separation. If omitted, the payload is removed at the rocket's CG, so the CG doesn't change.
     """
@@ -736,7 +736,7 @@ class PayloadConfig(_Base):
     length: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
     moment_of_intertia_XY: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
     moment_of_intertia_Z: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
-    center_of_gravity_from_tip: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
+    CG_from_tip: Optional[Annotated[float | list[float], FLOAT_RANGE_EXPANSION]] = None
 
 
 # -----------------------------------------------------------------------------
@@ -895,11 +895,22 @@ class ZonesConfig(_Base):
     buffer_zones_are_suboptimal_but_safe
         If true, landings in buffer_zones mark a heading as "suboptimal" (still safe) instead of unsafe;
         shown in yellow. The enlarged exclusion zones stay unsafe either way.
+    satellite_image
+        Background of the landing plots. Leave out to plot without background.
+        - `"download"`: downloads the image around the launch rail on every run (needs internet) and saves it as
+            satellite_image.tif in the project folder.
+        - A GeoTIFF file name in the project folder: uses that file, works offline.
+        - Example: "download"
+        - Example: "satellite_image.tif"
+    satellite_image_radius
+        Half side length [m] of the square image around the launch rail, used with satellite_image = "download".
     """
     exclusion_zones: dict[str, list[_PolarPoint]] = Field(default_factory=dict)
     buffer_zones: dict[str, list[_PolarPoint]] = Field(default_factory=dict)
     exclusion_zone_safety_margin: float = 1.0
     buffer_zones_are_suboptimal_but_safe: bool = False
+    satellite_image: Optional[str] = None
+    satellite_image_radius: float = 3000
 
 
 # =============================================================================

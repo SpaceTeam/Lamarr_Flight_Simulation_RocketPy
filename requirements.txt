@@ -22,6 +22,12 @@ pandas
 openpyxl
 plotly
 colorama
+rasterio
+Pillow
+
+# Satellite background export
+contextily
+xyzservices
 
 # Notebooks
 nbformat

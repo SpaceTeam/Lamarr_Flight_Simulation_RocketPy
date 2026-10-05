@@ -1,6 +1,10 @@
 #:schema ../../simulation_core/config_schemas/zones.schema.json
 # Coordinates: [distance_m, heading_deg] from the launch rail. heading: 0 = North, 90 = East, clockwise.
+# https://earth.google.com/earth/d/1ylt9d5F-7k42mQcoItcUz9kRHDOxjg2M?usp=sharing
+
 exclusion_zone_safety_margin = 1.3
+satellite_image = "satellite_image.tif"
+satellite_image_radius = 1000
 
 [exclusion_zones]
 "Spectators and Houses" = [

@@ -2,7 +2,9 @@
 Output and post-processing helpers for the RocketPy simulation backend.
 """
 
+import base64
 import csv
+import io
 import os
 import time
 from pathlib import Path
@@ -15,6 +17,9 @@ from matplotlib.path import Path as MatplotlibPath
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import rasterio
+from rasterio.warp import transform_bounds
+from PIL import Image
 from rocketpy.simulation import FlightDataExporter
 from rocketpy import Flight, Environment, Motor, Fins, Rocket
 
@@ -29,6 +34,7 @@ NOTEBOOK_SAVE_POLL_INTERVAL_S = 0.5
 HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"        # set by run_simulation.py
 MAX_PLOTLY_BUTTONS = 5
 SUPERSONIC_MACH = 1.2
+SATELLITE_JPEG_QUALITY = 85                     # JPEG keeps the embedded image (and thus the HTML) far smaller than PNG
 
 
 # =============================================================================
@@ -952,6 +958,10 @@ def add_compass_labels(figure: go.Figure):
             text=text,
             showarrow=False,
             font=dict(size=14, color="black", family="Arial Black"),
+            bgcolor="rgba(255, 255, 255, 0.5)",
+            width=20,
+            height=20,
+            borderpad=0,
             **position,
         )
 
@@ -1012,6 +1022,38 @@ def add_mode_flight_traces(
     return start_index, len(figure.data)
 
 
+def add_satellite_background(figure: go.Figure, image_path: Path, rail_latitude: float, rail_longitude: float) -> None:
+    """Draw a GeoTIFF satellite image behind the plot, placed in meters east/north of the launch rail like the zones."""
+    with rasterio.open(image_path) as image_file:
+        # Convert satellite image edges from EPSG:3857 (meters) to EPSG:4326 (lat/lon degrees)
+        west, south, east, north = transform_bounds(image_file.crs, "EPSG:4326", *image_file.bounds)
+        rgb_pixels = image_file.read()
+
+    # Convert the satellite image edges from lat/lon to the plot's local meters.
+    west_m, north_m = latlon_to_local_xy(north, west, rail_latitude, rail_longitude)
+    east_m, south_m = latlon_to_local_xy(south, east, rail_latitude, rail_longitude)
+
+    # rasterio returns (band, row, column); PIL needs (row, column, band).
+    image = Image.fromarray(np.moveaxis(rgb_pixels, 0, -1))
+    jpeg_buffer = io.BytesIO()
+    image.save(jpeg_buffer, format="JPEG", quality=SATELLITE_JPEG_QUALITY)
+    # embed image into the HTML file
+    image_source = "data:image/jpeg;base64," + base64.b64encode(jpeg_buffer.getvalue()).decode("ascii")
+
+    # Plotly anchors a layout image at its top-left corner
+    figure.add_layout_image(
+        source=image_source,
+        xref="x",
+        yref="y",
+        x=west_m,
+        y=north_m,
+        sizex=east_m - west_m,
+        sizey=north_m - south_m,
+        sizing="stretch",
+        layer="below",
+    )
+
+
 def plot_landing_positions_with_modes(
     params: SimParams,
     exclusion_zones,
@@ -1022,15 +1064,20 @@ def plot_landing_positions_with_modes(
     safety_by_config=None,
     zones_only=False,
     flight_computer_impacts=None,
+    satellite_image: Path | None = None,
 ):
     """Build an interactive landing-position plot with optional flight-mode buttons.
 
     When zones_only is True only the zones are drawn. Otherwise one button per entry of
-    mode_flight_groups toggles which mode's markers are visible.
+    mode_flight_groups toggles which mode's markers are visible. satellite_image is an optional GeoTIFF background.
     """
     project_path = params.project_path
     ensure_project_folders(project_path)
     figure = go.Figure()
+
+    if satellite_image:
+        environment = params.config.environment
+        add_satellite_background(figure, satellite_image, environment.latitude, environment.longitude)
 
     # Plot from least to most critical so the red exclusion zones stay on top.
     plot_zones(figure, suboptimal_zones, label="Suboptimal zone", color="gold")
@@ -1094,6 +1141,11 @@ def plot_landing_positions_with_modes(
         }
         add_plotly_buttons(figure, mode_trace_indices, always_visible_for_modes, zone_legend_flags)
 
+    if satellite_image:
+        gridcolor = "gray"
+    else:
+        gridcolor = "lightgray"
+    
     figure.update_layout(
         title=dict(text="Landing Positions", x=0.5, xanchor="center"),
         xaxis=dict(
@@ -1101,16 +1153,16 @@ def plot_landing_positions_with_modes(
             scaleanchor="y",
             scaleratio=1,
             showgrid=True,
-            gridcolor="lightgray",
+            gridcolor=gridcolor,
             zeroline=True,
-            zerolinecolor="lightgray",
+            zerolinecolor=gridcolor,
         ),
         yaxis=dict(
             title="North / South distance from launch rail [m]",
             showgrid=True,
-            gridcolor="lightgray",
+            gridcolor=gridcolor,
             zeroline=True,
-            zerolinecolor="lightgray",
+            zerolinecolor=gridcolor,
         ),
         width=900,
         height=700,
@@ -1130,7 +1182,7 @@ def plot_landing_positions_with_modes(
 # Notebook display mode
 # =============================================================================
 
-def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, suboptimal_zones):
+def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, suboptimal_zones, satellite_image: Path | None = None):
     """Run the notebook display mode that fits the config: a single flight or variations.
 
     Both modes share the same All/Safe/Suboptimal/Unsafe landing-positions plot. Single-flight mode adds a
@@ -1172,6 +1224,7 @@ def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, 
         mode_flight_groups=mode_flight_groups,
         safety_by_config=safety_by_config,
         flight_computer_impacts=flight_computer_impacts,
+        satellite_image=satellite_image,
     )
 
     if not has_variations(params.config):

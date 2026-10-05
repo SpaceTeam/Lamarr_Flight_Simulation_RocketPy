@@ -6,11 +6,13 @@ import itertools
 import math
 import tomllib
 from pathlib import Path
+import pymap3d
 from IPython import get_ipython
 from IPython.display import Markdown, display
 from pydantic import BaseModel
 from rocketpy import EmptyMotor
 from simulation_core.config_schema import Config, SimParams, ZonesConfig, PAIRED_VARIATIONS, accepts_variation
+from simulation_core.export_satellite_image import DOWNLOAD_KEYWORD, download_satellite_image
 
 FLIGHT_MAX_TIME_S = 3600            # RocketPy's 600 s default cuts off long descents (e.g. main at apogee)
 FLIGHT_MAX_TIME_STEP_S = 0.1        # upper limit per solver step; the uncapped first step (~max_time/1000 = 3.6 s) can jump over a whole motor burn
@@ -329,6 +331,12 @@ def _polar_to_cartesian(distance_m: float, heading_deg: float):
     return (distance_m * math.sin(heading_rad), distance_m * math.cos(heading_rad))
 
 
+def latlon_to_local_xy(lat, lon, ref_lat, ref_lon):
+    """Convert (lat, lon) to local Cartesian (x_east, y_north) meters around (ref_lat, ref_lon)."""
+    x_east, y_north, _ = pymap3d.geodetic2enu(lat, lon, 0.0, ref_lat, ref_lon, 0.0)
+    return float(x_east), float(y_north)
+
+
 def load_zones(zones_path: Path):
     """
     Load polygon zones from a TOML file.
@@ -348,11 +356,14 @@ def load_zones(zones_path: Path):
 
     - exclusion_zone_safety_margin: Factor used to enlarge exclusion zones when checking whether a flight is unsafe.
 
+    - satellite_image: Path of the background GeoTIFF for the landing plots, or None if zones.toml sets none.
+        With satellite_image = "download" the image is downloaded first.
+
     We later mark a flight as unsafe if any trajectory (nominal, no_main, ballistic) enters a buffer zone,
     and as suboptimal if it only enters a suboptimal zone.
     """
     if not zones_path.exists():
-        return {}, {}, {}, 1
+        return {}, {}, {}, 1, None
 
     with open(zones_path, "rb") as zones_file:
         zones = ZonesConfig.model_validate(tomllib.load(zones_file))
@@ -365,10 +376,17 @@ def load_zones(zones_path: Path):
 
     exclusion_zones = convert(zones.exclusion_zones)
     buffer_zones = convert(zones.buffer_zones)
+    project_path = zones_path.parent
+    if zones.satellite_image == DOWNLOAD_KEYWORD:
+        satellite_image = download_satellite_image(project_path, zones.satellite_image_radius)
+    elif zones.satellite_image:
+        satellite_image = project_path / zones.satellite_image
+    else:
+        satellite_image = None
     # Move the buffer zones into the suboptimal group so they no longer make a heading unsafe
     if zones.buffer_zones_are_suboptimal_but_safe:
-        return exclusion_zones, {}, buffer_zones, zones.exclusion_zone_safety_margin
-    return exclusion_zones, buffer_zones, {}, zones.exclusion_zone_safety_margin
+        return exclusion_zones, {}, buffer_zones, zones.exclusion_zone_safety_margin, satellite_image
+    return exclusion_zones, buffer_zones, {}, zones.exclusion_zone_safety_margin, satellite_image
 
 
 # =============================================================================

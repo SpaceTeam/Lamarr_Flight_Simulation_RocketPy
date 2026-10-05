@@ -55,6 +55,33 @@
       "description": "If true, landings in buffer_zones mark a heading as \"suboptimal\" (still safe) instead of unsafe;\nshown in yellow. The enlarged exclusion zones stay unsafe either way.",
       "title": "Buffer Zones Are Suboptimal But Safe",
       "type": "boolean"
+    },
+    "satellite_image": {
+      "anyOf": [
+        {
+          "type": "string",
+          "examples": [
+            "download",
+            "satellite_image.tif"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Background of the landing plots. Leave out to plot without background.\n- `\"download\"`: downloads the image around the launch rail on every run (needs internet) and saves it as\n    satellite_image.tif in the project folder.\n- A GeoTIFF file name in the project folder: uses that file, works offline.",
+      "examples": [
+        "download",
+        "satellite_image.tif"
+      ],
+      "title": "Satellite Image"
+    },
+    "satellite_image_radius": {
+      "default": 3000,
+      "description": "Half side length [m] of the square image around the launch rail, used with satellite_image = \"download\".",
+      "title": "Satellite Image Radius",
+      "type": "number"
     }
   },
   "title": "ZonesConfig",

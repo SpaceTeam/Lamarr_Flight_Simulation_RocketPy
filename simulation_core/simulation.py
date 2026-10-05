@@ -777,8 +777,8 @@ def create_flight(params: SimParams):
 
         flight_config = combo_config.flight
         payload_mass_total = combo_config.payload.mass_total if isinstance(combo_config.payload.mass_total, (int, float)) else 0
-        payload_center_from_tip = combo_config.payload.center_from_tip
-        payload_position_m = None if payload_center_from_tip is None else get_position_from_tip(payload_center_from_tip, millimeters_to_meters(combo_config.rocket.length))
+        payload_CG_from_tip = combo_config.payload.CG_from_tip
+        payload_position_m = None if payload_CG_from_tip is None else get_position_from_tip(payload_CG_from_tip, millimeters_to_meters(combo_config.rocket.length))
         scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, scenarios_to_build, payload_mass_total, payload_position_m)
         # RocketPy adds parachute pressure data to the rocket object during flight. A fresh copy for each combination flight avoids 
         # accumulating parachute data from previous flights (memory leak).

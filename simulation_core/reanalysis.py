@@ -14,7 +14,6 @@ from rocketpy import Function, Flight, LiquidMotor, Motor, Parachute, Rocket, So
 from rocketpy.simulation.flight_data_importer import FlightDataImporter
 from pyproj import Geod
 from scipy.spatial.transform import Rotation, Slerp
-import pymap3d as pm
 import pandas as pd
 
 from simulation_core.utils import *
@@ -705,12 +704,6 @@ def create_matched_flight(
     splice_matched_flight_in_place(spliced_flight, nominal_flight, t_match)
 
     return spliced_flight
-
-
-def latlon_to_local_xy(lat, lon, ref_lat, ref_lon):
-    """Convert (lat, lon) to local Cartesian (x_east, y_north) meters around (ref_lat, ref_lon)."""
-    x_east, y_north, _ = pm.geodetic2enu(lat, lon, 0.0, ref_lat, ref_lon, 0.0)
-    return float(x_east), float(y_north)
 
 
 def compute_flight_computer_impacts(data, env):

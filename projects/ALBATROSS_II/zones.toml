@@ -2,6 +2,10 @@
 # Coordinates: [distance_m, heading_deg] from the launch rail. heading: 0 = North, 90 = East, clockwise.
 exclusion_zone_safety_margin = 1.2
 buffer_zones_are_suboptimal_but_safe = true
+satellite_image = "satellite_image.tif"
+satellite_image_radius = 3500
+
+# https://earth.google.com/earth/d/1wdewijxjJ-O3aN2DQexb2UzC86n7rpyS?usp=sharing
 
 [exclusion_zones]
 Cars = [[736.46, 130.55], [808.14, 143.82], [1035.64, 139.11], [1075.25, 127.37]]
