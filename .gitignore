@@ -14,3 +14,6 @@ landing_positions.html
 *compare_trajectories.html
 *Motion_over_time.html
 projects/ALBATROSS_II/variation_stats.xlsx
+projects/ALBATROSS_II/openrocket_landing_positions.csv
+projects/ALBATROSS_II/plots/openrocket_landing_positions.html
+projects/ALBATROSS/variation_stats.xlsx
