@@ -13,15 +13,23 @@ longitude = 15.7302372  # todo: update when known exactly
 max_expected_height = 7000
 elevation = 123.8920653  # todo: update when known exactly
 timezone = "Europe/Berlin"
+
+# online
 # envType = ["Windy", "custom_atmosphere"]
-envType = ["custom_atmosphere"]
-# envType = ["standard_atmosphere_wind"]
-# envType = ["reanalysis_custom"]
 # windy_weather_models = ["ICONEU"]
+envType = ["custom_atmosphere"]
 custom_weather_models = ["icon_d2", "icon_eu"]
+
+# offline
+# envType = ["reanalysis_custom"]
 # reanalysis_csv = {icon_d2 = "rocketpy_atmosphere_icon_eu_test.csv", icon_eu = "rocketpy_atmosphere_icon_d2_test.csv"}
+# reanalysis_csv = {icon_d2 = "rocketpy_atmosphere_icon_eu.csv", icon_eu = "rocketpy_atmosphere_icon_d2.csv"}
+
+# standard
+# envType = ["standard_atmosphere_wind"]
 # standard_atmosphere_wind_speeds = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 # standard_atmosphere_wind_speeds = 2
+
 
 [engine]
 type = "solid"
