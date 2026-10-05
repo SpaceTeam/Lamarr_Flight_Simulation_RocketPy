@@ -241,7 +241,9 @@ def plot_all_flights_with_custom_plots(params: SimParams, scenario_sets):
     custom_plots.plot_stability_and_cg_cp_position()
     custom_plots.plot_angle_of_attack_and_attitude_angle()
     custom_plots.plot_angular_velocity(transform_openrocket=False)
-    if not params.runtime.reanalysis_mode:
+    
+    if params.config.reanalysis is None:
+        # when a reanalysis section is present reanalysis.py will plot plot_motion_per_source comparing simulation to flight computer data
         custom_plots.plot_motion_over_time()
 
 

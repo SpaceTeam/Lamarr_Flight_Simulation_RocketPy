@@ -957,7 +957,6 @@ class RuntimeParams(BaseModel):
         Payload rocket dict built by deployable_payload.
     flight_payload: 
         List of payload Flight objects.
-    reanalysis_mode: True if any environment is of type reanalysis.
     gnss_3d_traces: 
         Dict of GNSS 3D traces from reanalysis for the trajectory plot.
     flight_computer_impacts: 
@@ -980,7 +979,6 @@ class RuntimeParams(BaseModel):
     payload_parachute: Optional[Any] = None
     payload: Optional[Any] = None
     flight_payload: Optional[list] = None
-    reanalysis_mode: bool = False
     gnss_3d_traces: Optional[dict] = None
     flight_computer_impacts: Optional[list] = None
     reanalysis_flight_computer_data: Optional[dict] = None
