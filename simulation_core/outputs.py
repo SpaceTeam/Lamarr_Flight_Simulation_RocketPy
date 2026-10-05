@@ -7,6 +7,7 @@ import csv
 import io
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import nbformat
@@ -35,6 +36,19 @@ HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"        # set by run_simulation.py
 MAX_PLOTLY_BUTTONS = 5
 SUPERSONIC_MACH = 1.2
 SATELLITE_JPEG_QUALITY = 85                     # JPEG keeps the embedded image (and thus the HTML) far smaller than PNG
+# Stats table columns shared by RocketPy and OpenRocket: metric key -> (header, decimal places). The keys are also the metric
+# names of the OpenRocket sweep notebook; parachute shocks are named after the parachute, e.g. "drogue_shock" (see stats_column).
+STATS_COLUMNS = {
+    "thrust_to_weight_at_rail_exit": ("Thrust to weight\nratio @ rail exit", 2),
+    "velocity_at_rail_exit": ("rail exit\nvelocity [m/s]", 1),
+    "stability_at_rail_exit": ("stability\n@ rail exit [cal]", 2),
+    "max_instability_in_supersonic_region": ("max instability in\nsupersonic region [cal]", 2),
+    "apogee": ("apogee\nAGL [m]", 0),
+    "impact_speed": ("Impact\nspeed [m/s]", 2),
+    "landing_distance": ("Landing distance\nfrom launch [m]", 0),
+    "speed_at_main_deployment": ("speed @\nmain deployment [m/s]", 2),
+}
+STATS_LABEL_COLUMNS = ("Environment", "Config")
 
 
 # =============================================================================
@@ -562,71 +576,68 @@ def export_notebook_to_html(notebook_path, output_path=None):
 # Safety printing
 # =============================================================================
 
-def print_configurations(title, configurations):
-    """Print configurations grouped by heading, then environment."""
+def configuration_label(point: "LandingPoint") -> str:
+    """Describe a landing point's configuration in one line."""
+    return ", ".join(f"{name}={value}" for name, value in point.configuration.items())
+
+
+def print_configurations(title: str, nominal_points: list["LandingPoint"]):
+    """Print the configurations of the given nominal landing points grouped by heading, then configuration."""
     printmd(f"## {title}")
 
-    if not configurations:
+    if not nominal_points:
         print("None")
         return
 
+    # {heading: {configuration: {inclination, ...}}}
     grouped = {}
+    for point in nominal_points:
+        grouped.setdefault(point.heading, {}).setdefault(configuration_label(point), set()).add(point.inclination)
 
-    for configuration in configurations:
-        if len(configuration) == 3:
-            environment, heading, inclination = configuration
-        else:
-            heading, inclination = configuration
-            environment = "all environments"
-
-        grouped.setdefault(heading, {}).setdefault(environment, set()).add(inclination)
-
-    for heading, environments in sorted(grouped.items()):
+    for heading, configurations in sorted(grouped.items()):
         print(f"\nHeading {heading}:")
 
-        for environment, inclinations in sorted(environments.items()):
-            print(f"- {environment}: inclinations {sorted(inclinations)}")
+        for configuration, inclinations in sorted(configurations.items()):
+            print(f"- {configuration}: inclinations {sorted(inclinations)}")
 
 
-def print_flight_details(params: SimParams, safety_label: str, buffer_zones: dict, suboptimal_zones: dict):
-    """Print one table with landing coordinates, distance and landing zone type for every flight with the given safety label.
+def print_flight_details(landing_points: list["LandingPoint"], label_by_heading: dict[float, str], safety_label: str,
+                         buffer_zones: dict, suboptimal_zones: dict):
+    """Print one table with landing coordinates, distance and landing zone type for every landing point with the given safety label.
 
-    The unsafe table only lists flights that landed in a buffer zone; heading/inclination/scenario cells that repeat the row above are left blank.
+    The unsafe table only lists points that landed in a buffer zone; heading/inclination/scenario cells that repeat the row above are left blank.
     """
     printmd(f"## {safety_label.capitalize()} flight details")
 
-    # Scenario name -> params.runtime attribute holding this safety label's flights (also defines the table's scenario order)
-    scenario_attributes = {
-        "nominal":   f"{safety_label}_rocket_nominal",
-        "no_main":   f"{safety_label}_rocket_no_main",
-        "ballistic": f"{safety_label}_rocket_ballistic",
-        "payload":   f"{safety_label}_payload",
-    }
+    # Scenarios shown in the table, in table order
+    scenario_order = ["nominal", "no_main", "ballistic", "payload"]
     rows = []
 
-    for scenario, attr_name in scenario_attributes.items():
-        for flight in get_flights(params, attr_name):
-            if flight_lands_in_zone(flight, buffer_zones):
-                zone_type = "unsafe"
-            elif flight_lands_in_zone(flight, suboptimal_zones):
-                zone_type = "subopt."
-            else:
-                zone_type = "safe"
+    for point in landing_points:
+        if point.scenario not in scenario_order or label_by_heading[point.heading] != safety_label:
+            continue
 
-            if safety_label == "unsafe" and zone_type != "unsafe":
-                continue
+        if lands_in_zone(point.x_east_m, point.y_north_m, buffer_zones):
+            zone_type = "unsafe"
+        elif lands_in_zone(point.x_east_m, point.y_north_m, suboptimal_zones):
+            zone_type = "subopt."
+        else:
+            zone_type = "safe"
 
-            env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
-            coordinates = f"{flight.latitude(flight.t_final):.6f}, {flight.longitude(flight.t_final):.6f}"
-            rows.append([flight.heading, flight.inclination, scenario, env_name, coordinates, round(landing_distance(flight)), zone_type])
+        if safety_label == "unsafe" and zone_type != "unsafe":
+            continue
+
+        coordinates = f"{point.latitude:.6f}, {point.longitude:.6f}"
+        distance = round(float(np.hypot(point.x_east_m, point.y_north_m)))
+        rows.append([point.heading, point.inclination, point.scenario, *point.configuration.values(), coordinates, distance, zone_type])
 
     if not rows:
         print("None")
         return
 
-    # Sort by heading, inclination, scenario (in the order above) and environment
-    scenario_order = list(scenario_attributes)
-    rows.sort(key=lambda row: (row[0], row[1], scenario_order.index(row[2]), row[3]))
+    # Sort by heading, inclination, scenario (in the order above) and the configuration columns
+    configuration_names = list(landing_points[0].configuration)
+    rows.sort(key=lambda row: (row[0], row[1], scenario_order.index(row[2]), *row[3:3 + len(configuration_names)]))
 
     # Blank the leading heading/inclination/scenario cells that match the row above, so each group value is shown once
     group_column_count = 3
@@ -639,28 +650,21 @@ def print_flight_details(params: SimParams, safety_label: str, buffer_zones: dic
         merged_rows.append([""] * repeated_cells + row[repeated_cells:])
         previous_row = row
 
-    headers = ["Heading [°]", "Incl. [°]", "Scenario", "Environment", "Coordinates (lat, lon)", "Distance [m]", "Type"]
-    column_alignment = ("right", "right", "left", "left", "left", "right", "center")
+    headers = ["Heading [°]", "Incl. [°]", "Scenario", *configuration_names, "Coordinates (lat, lon)", "Distance [m]", "Type"]
+    column_alignment = ("right", "right", "left") + ("left",) * len(configuration_names) + ("left", "right", "center")
     printmd(tabulate(merged_rows, headers=headers, tablefmt="pipe", colalign=column_alignment))
 
 
-def print_landing_distance_summary(params: SimParams):
+def print_landing_distance_summary(landing_points: list["LandingPoint"], label_by_heading: dict[float, str]):
     """Print the min and max landing distance from the launch rail per heading and inclination, one column per scenario."""
-    # Pair every flight (rocket scenarios and payload) with its scenario name.
-    flights_with_scenario = [(name, flight) for scenario_set in params.runtime.scenario_sets for name, flight in scenario_set.items()]
-    flights_with_scenario += [("payload", flight) for flight in get_flights(params, "flight_payload")]
-
-    # Build: {(heading, inclination): {scenario: [distance, ...]}}; each list holds one distance per environment.
+    # Build: {(heading, inclination): {scenario: [distance, ...]}}; each list holds one distance per configuration.
     distances_by_config = {}
-    for scenario_name, flight in flights_with_scenario:
-        config_distances = distances_by_config.setdefault((flight.heading, flight.inclination), {})
-        config_distances.setdefault(scenario_name, []).append(landing_distance(flight))
+    for point in landing_points:
+        config_distances = distances_by_config.setdefault((point.heading, point.inclination), {})
+        config_distances.setdefault(point.scenario, []).append(float(np.hypot(point.x_east_m, point.y_north_m)))
 
     # SCENARIO_COLORS lists every scenario in display order; only keep the ones that were simulated.
     scenario_names = [name for name in SCENARIO_COLORS if any(name in by_scenario for by_scenario in distances_by_config.values())]
-    # Safety is decided per heading, so any environment/inclination of that heading gives the same label.
-    safety_by_heading = {heading: label for (_env, heading, _inclination), label in build_safety_by_config(params).items()}
-
     # Pool every heading and inclination per scenario for the closing "Total" row.
     total_by_scenario = {}
     for by_scenario in distances_by_config.values():
@@ -669,7 +673,7 @@ def print_landing_distance_summary(params: SimParams):
 
     # Each row is (leading cells, {scenario: distances}); the Total row comes last.
     row_sources = [
-        ([heading, inclination, safety_by_heading.get(heading, "unknown")], by_scenario)
+        ([heading, inclination, label_by_heading[heading]], by_scenario)
         for (heading, inclination), by_scenario in sorted(distances_by_config.items())
     ]
     row_sources.append((["**Total**", "", ""], total_by_scenario))
@@ -683,14 +687,105 @@ def print_landing_distance_summary(params: SimParams):
         rows.append(row)
 
     printmd("## Landing distance from launch rail")
-    printmd("Min - max distance in meters across all environments, per heading and inclination.")
+    configuration_names = ", ".join(landing_points[0].configuration)
+    printmd(f"Min - max distance in meters across all configurations ({configuration_names}), per heading and inclination.")
     column_alignment = ("right", "right", "left") + ("left",) * len(scenario_names)
-    printmd(tabulate(rows, headers=["Heading [°]", "Inclination [°]", "Safety", *scenario_names], tablefmt="pipe", colalign=column_alignment))
+    printmd(
+        tabulate(
+            rows,
+            headers=["Heading [°]", "Inclination [°]", "Safety", *scenario_names],
+            tablefmt="pipe",
+            colalign=column_alignment,
+        )
+    )
+
+
+def print_safety_summary(
+    landing_points: list["LandingPoint"], label_by_heading: dict[float, str], buffer_zones: dict, suboptimal_zones: dict
+):
+    """Print the landing distance summary, then the configurations and flight details per safety label 
+    (shared by RocketPy and OpenRocket)."""
+    print_landing_distance_summary(landing_points, label_by_heading)
+    titles = {
+        "safe": "Safe Configurations by Heading",
+        "suboptimal": "Suboptimal (but safe) Configurations by Heading",
+        "unsafe": "Unsafe Configurations by Heading",
+    }
+    for safety_label, title in titles.items():
+        # Without suboptimal zones no heading can be suboptimal, so its section is left out.
+        if safety_label == "suboptimal" and not suboptimal_zones:
+            continue
+        nominal_points = [
+            point
+            for point in landing_points
+            if point.scenario == "nominal" and label_by_heading[point.heading] == safety_label
+        ]
+        print_configurations(title, nominal_points)
+        print_flight_details(landing_points, label_by_heading, safety_label, buffer_zones, suboptimal_zones)
 
 
 # =============================================================================
 # Safety calculations
 # =============================================================================
+
+@dataclass
+class LandingPoint:
+    """One simulated landing position, shared by RocketPy and OpenRocket."""
+    scenario: str                   # key of SCENARIO_COLORS, e.g. "nominal", "no_main", "ballistic" or "payload"
+    heading: float                  # launch heading [°]; the safety classification groups by it
+    inclination: float              # launch inclination [°] from horizontal
+    x_east_m: float
+    y_north_m: float
+    latitude: float
+    longitude: float
+    configuration: dict[str, str]   # what else distinguishes the runs, e.g. {"Environment": "icon_d2"}; table columns and hover lines
+
+
+def landing_points_from_runtime(params: SimParams) -> list[LandingPoint]:
+    """Save every simulated RocketPy flight (all scenarios and payload flights) into a LandingPoint."""
+
+    flights_with_scenario = [
+        (scenario, flight) for scenario_set in params.runtime.scenario_sets for scenario, flight in scenario_set.items()
+    ]
+    flights_with_scenario += [("payload", flight) for flight in get_flights(params, "flight_payload")]
+    variation_names = list(
+        dict.fromkeys(
+            name
+            for _scenario, flight in flights_with_scenario
+            for name in getattr(flight, "_meta", {})
+            if name not in ("heading", "inclination")
+        )
+    )
+    return [
+        LandingPoint(
+            scenario=scenario,
+            heading=flight.heading,
+            inclination=flight.inclination,
+            x_east_m=flight.x_impact,
+            y_north_m=flight.y_impact,
+            latitude=flight.latitude(flight.t_final),
+            longitude=flight.longitude(flight.t_final),
+            configuration={
+                "Environment": flight.env.name if hasattr(flight.env, "name") else flight.name,
+                # "-" for flights without that variation value, e.g. a payload flight
+                **{name: str(getattr(flight, "_meta", {}).get(name, "-")) for name in variation_names},
+            },
+        )
+        for scenario, flight in flights_with_scenario
+    ]
+
+
+def classify_headings(landing_points: list[LandingPoint], buffer_zones: dict, suboptimal_zones: dict) -> dict[float, str]:
+    """Return {heading: "safe" | "suboptimal" | "unsafe"}: a heading is unsafe if any of its points lands in a buffer zone,
+    otherwise suboptimal if any lands in a suboptimal zone."""
+    unsafe_headings = {point.heading for point in landing_points if lands_in_zone(point.x_east_m, point.y_north_m, buffer_zones)}
+    # A heading that is unsafe stays unsafe even if it also lands in a suboptimal zone.
+    suboptimal_headings = {point.heading for point in landing_points if lands_in_zone(point.x_east_m, point.y_north_m, suboptimal_zones)} - unsafe_headings
+    return {
+        point.heading: "unsafe" if point.heading in unsafe_headings else "suboptimal" if point.heading in suboptimal_headings else "safe"
+        for point in landing_points
+    }
+
 
 def get_flights(params: SimParams, attr_name: str) -> list[Flight]:
     """Return a flight list from params.runtime by attribute name, or empty list when not set."""
@@ -700,55 +795,14 @@ def get_flights(params: SimParams, attr_name: str) -> list[Flight]:
     return ensure_list(value)
 
 
-def scenario_config_key(flight: Flight):
-    """Identifier for the configuration a flight belongs to: (env_name, heading, inclination)."""
-    env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
-    return (env_name, flight.heading, flight.inclination)
-
-
 def landing_distance(flight: Flight) -> float:
     """Return the horizontal distance in meters between the launch rail and the flight's impact point."""
     return float(np.hypot(flight.x_impact, flight.y_impact))
 
 
-def flight_lands_in_zone(flight: Flight, zones: dict):
-    """Return True when the flight's impact point lies inside any of the supplied zone polygons."""
-    return any(
-        MatplotlibPath(zone_coordinates).contains_point((flight.x_impact, flight.y_impact))
-        for zone_coordinates in zones.values()
-    )
-
-
-def split_flights_by_scenario(scenario_sets: list[dict]) -> tuple[list[Flight], list[Flight], list[Flight], list[Flight]]:
-    """Split scenario-set dicts into nominal, no-main, ballistic, and matched flight lists."""
-    nominal_flights = []
-    no_main_flights = []
-    ballistic_flights = []
-    matched_flights = []
-
-    for scenario_set in scenario_sets:
-        if "nominal" in scenario_set:
-            nominal_flights.append(scenario_set["nominal"])
-        if "no_main" in scenario_set:
-            no_main_flights.append(scenario_set["no_main"])
-        if "ballistic" in scenario_set:
-            ballistic_flights.append(scenario_set["ballistic"])
-        if "matched" in scenario_set:
-            matched_flights.append(scenario_set["matched"])
-
-    return nominal_flights, no_main_flights, ballistic_flights, matched_flights
-
-
-def store_safety_results(params: SimParams, prefix: str, scenario_sets: list[dict]):
-    """Store nominal, no-main, ballistic, matched, and configuration lists in params.runtime."""
-    nominal_flights, no_main_flights, ballistic_flights, matched_flights = split_flights_by_scenario(scenario_sets)
-    configurations = sorted({scenario_config_key(flight) for flight in nominal_flights})
-
-    setattr(params.runtime, f"{prefix}_rocket_nominal", nominal_flights)
-    setattr(params.runtime, f"{prefix}_rocket_no_main", no_main_flights)
-    setattr(params.runtime, f"{prefix}_rocket_ballistic", ballistic_flights)
-    setattr(params.runtime, f"{prefix}_rocket_matched", matched_flights)
-    setattr(params.runtime, f"{prefix}_configurations", configurations)
+def lands_in_zone(x_east_m: float, y_north_m: float, zones: dict) -> bool:
+    """Return True when the landing point lies inside any of the supplied zone polygons."""
+    return any(MatplotlibPath(zone_coordinates).contains_point((x_east_m, y_north_m)) for zone_coordinates in zones.values())
 
 
 def print_flight_stats(params: SimParams):
@@ -770,18 +824,9 @@ def print_flight_stats(params: SimParams):
 def print_scenario_stats(params: SimParams, scenario: str) -> pd.DataFrame | None:
     """Print a table of per-flight stats for one scenario (one row per environment/variation combination) and return it, 
     or None if there are no such flights."""
-    # Launch, apogee and parachute stats repeat the nominal values for no_main/ballistic, so only nominal and matched 
+    # Launch, apogee and parachute stats repeat the nominal values for no_main/ballistic, so only nominal and matched
     # (spliced launch-to-landing flight) show them
     show_full_stats = scenario in ("nominal", "matched")
-    headers = ["Environment", "Config"]
-    if show_full_stats:
-        headers.extend(["Thrust to weight\nratio @ rail exit", "rail exit\nvelocity [m/s]",
-                        "stability\n@ rail exit [cal]",
-                        "max instability in\nsupersonic region [cal]",
-                        "apogee\nAGL [m]"])
-    headers.extend(["Impact\nspeed [m/s]", "Landing distance\nfrom launch [m]"])
-    add_main_speed = False
-    parachute_names = []
     rows = []
 
     scenario_flights = [scenario_set[scenario] for scenario_set in params.runtime.scenario_sets if scenario in scenario_set]
@@ -790,116 +835,85 @@ def print_scenario_stats(params: SimParams, scenario: str) -> pd.DataFrame | Non
 
     for flight in scenario_flights:
         meta = getattr(flight, "_meta", {})
-        config_str = ",\n".join(f"{k}={v}" for k, v in meta.items()) if meta else "-"
-        row_values = [flight.env.name, config_str]
+        row = {"Environment": flight.env.name, "Config": ",\n".join(f"{k}={v}" for k, v in meta.items()) if meta else "-"}
 
         if show_full_stats:
             # Flights started from a shared ascent's apogee have no rail/burn phase, so read those stats from the ascent
             ascent = getattr(flight, "ascent_flight", None) or flight
             t_rail = ascent.out_of_rail_time
-            t_w = ascent.rocket.motor.thrust(t_rail) / (ascent.rocket.total_mass(t_rail) * 9.81)
-            v_rail = ascent.out_of_rail_velocity
-            stability = ascent.stability_margin(t_rail)
+            row["thrust_to_weight_at_rail_exit"] = ascent.rocket.motor.thrust(t_rail) / (ascent.rocket.total_mass(t_rail) * 9.81)
+            row["velocity_at_rail_exit"] = ascent.out_of_rail_velocity
+            row["stability_at_rail_exit"] = ascent.stability_margin(t_rail)
 
             # max instability in supersonic region
-            if ascent.max_mach_number > SUPERSONIC_MACH:
-                stability_at_max_speed = round(ascent.stability_margin(ascent.max_speed_time), 2)
-            else:
-                stability_at_max_speed = "-"
-            apogee_agl = flight.apogee - flight.env.elevation
-            row_values.extend([round(t_w, 2), round(v_rail, 1), round(stability, 2), stability_at_max_speed, round(apogee_agl)])
+            supersonic = ascent.max_mach_number > SUPERSONIC_MACH
+            row["max_instability_in_supersonic_region"] = ascent.stability_margin(ascent.max_speed_time) if supersonic else "-"
+            row["apogee"] = flight.apogee - flight.env.elevation
 
-        row_values.extend([round(abs(flight.impact_velocity), 2), round(landing_distance(flight))])
+        row["impact_speed"] = abs(flight.impact_velocity)
+        row["landing_distance"] = landing_distance(flight)
 
         if show_full_stats:
             opening_times = {parachute.name: trigger_time + parachute.lag for trigger_time, parachute in flight.parachute_events}
 
             # Shock around deployment for each parachute (flights of one scenario all deploy the same parachutes)
-            for deployment_time in opening_times.values():
-                row_values.append(round(get_shock_at_parachute_deployment(flight, deployment_time), 2))
-            parachute_names = list(opening_times)
+            for parachute_name, deployment_time in opening_times.items():
+                row[f"{parachute_name}_shock"] = get_shock_at_parachute_deployment(flight, deployment_time)
 
-            # speed @ main deployment
-            main_deployment_time = opening_times.get("main")
-            if main_deployment_time:
-                row_values.append(round(get_speed_at_parachute_deployment(flight, main_deployment_time), 2))
-                add_main_speed = True
+            if "main" in opening_times:
+                row["speed_at_main_deployment"] = get_speed_at_parachute_deployment(flight, opening_times["main"])
 
-        rows.append(row_values)
+        rows.append(row)
 
     if not rows:
         return None
+    return print_stats_table(scenario, rows)
 
-    headers.extend(f"{name} shock\n@ deployment [g]" for name in parachute_names)
-    
-    if add_main_speed:
-        headers.append("speed @\nmain deployment [m/s]")
+
+def stats_column(metric_key: str) -> tuple[str, int]:
+    """Return the header and the decimal places of a stats value; parachute shocks are named after the parachute, e.g. "drogue_shock"."""
+    if metric_key.endswith("_shock"):
+        return f"{metric_key.removesuffix('_shock')} shock\n@ deployment [g]", 2
+    return STATS_COLUMNS[metric_key]
+
+
+def print_stats_table(scenario: str, rows: list[dict]) -> pd.DataFrame:
+    """Print the "Stats for <scenario> flights" table (shared by RocketPy and OpenRocket) and return it as a DataFrame.
+
+    Each row is {"Environment": ..., "Config": ..., <metric key>: raw value, ...}; headers and rounding come from
+    STATS_COLUMNS, the columns keep the order of the keys, and a value a row does not have shows as "-".
+    """
+    metric_keys = list(dict.fromkeys(key for row in rows for key in row if key not in STATS_LABEL_COLUMNS))
+    headers = [*STATS_LABEL_COLUMNS, *(stats_column(key)[0] for key in metric_keys)]
+    table_rows = []
+    for row in rows:
+        values = [row.get(key, "-") for key in metric_keys]
+        # Round numbers to the column's decimal places
+        rounded = [round(value, stats_column(key)[1] or None) if isinstance(value, float) else value for key, value in zip(metric_keys, values)]
+        table_rows.append([row[label] for label in STATS_LABEL_COLUMNS] + rounded)
 
     # Markdown tables can't hold line breaks: headers get spaces, multi-line cells (config) get HTML <br> breaks
     single_line_headers = [header.replace("\n", " ") for header in headers]
-    markdown_rows = [[value.replace("\n", "<br>") if isinstance(value, str) else value for value in row] for row in rows]
+    markdown_rows = [[value.replace("\n", "<br>") if isinstance(value, str) else value for value in row] for row in table_rows]
 
     printmd(f"## Stats for {scenario} flights")
-    column_alignment = ("left", "left") + ("right",) * (len(headers) - 2)
+    column_alignment = ("left",) * len(STATS_LABEL_COLUMNS) + ("right",) * len(metric_keys)
     printmd(tabulate(markdown_rows, headers=single_line_headers, tablefmt="pipe", colalign=column_alignment))
 
-    return pd.DataFrame(rows, columns=single_line_headers)
+    return pd.DataFrame(table_rows, columns=single_line_headers)
 
 
-def calculate_safe_flights(params: SimParams, buffer_zones: dict, suboptimal_zones: dict):
-    """Classify all flights as safe, suboptimal or unsafe based on landing zone membership.
+def calculate_safe_flights(params: SimParams, landing_points: list[LandingPoint], buffer_zones: dict, suboptimal_zones: dict) -> dict[float, str]:
+    """Classify all flights as safe, suboptimal or unsafe based on landing zone membership, print the results
+    and return {heading: safety label}.
 
     A heading is unsafe if any scenario (nominal/no_main/ballistic/payload), inclination,
     or environment caused a landing inside a buffer zone; otherwise it is suboptimal if any landed inside a suboptimal zone.
     """
-    payload_flights = get_flights(params, "flight_payload")
-    scenario_sets = params.runtime.scenario_sets
-    all_flights = [flight for scenario_set in scenario_sets for flight in scenario_set.values()] + payload_flights
-
-    # First pass: find which headings have any flight landing in each zone type.
-    unsafe_headings = {flight.heading for flight in all_flights if flight_lands_in_zone(flight, buffer_zones)}
-    # A heading that is unsafe stays unsafe even if it also lands in a suboptimal zone.
-    suboptimal_headings = {flight.heading for flight in all_flights if flight_lands_in_zone(flight, suboptimal_zones)} - unsafe_headings
-    label_by_heading = {heading: "suboptimal" for heading in suboptimal_headings} | {heading: "unsafe" for heading in unsafe_headings}
-
-    # Second pass: every scenario_set and payload flight takes its heading's label, even if its specific
-    # (env, inclination) flights all landed outside the zones.
-    for safety_label in SAFETY_LABELS:
-        store_safety_results(params, safety_label, [s for s in scenario_sets if label_by_heading.get(s["nominal"].heading, "safe") == safety_label])
-        setattr(params.runtime, f"{safety_label}_payload", [p for p in payload_flights if label_by_heading.get(p.heading, "safe") == safety_label])
-
+    label_by_heading = classify_headings(landing_points, buffer_zones, suboptimal_zones)
     print_flight_stats(params)
-    print_landing_distance_summary(params)
-    print_configurations("Safe Configurations by Heading", params.runtime.safe_configurations or [])
-    print_flight_details(params, "safe", buffer_zones, suboptimal_zones)
-    if suboptimal_zones:
-        print_configurations("Suboptimal (but safe) Configurations by Heading", params.runtime.suboptimal_configurations or [])
-        print_flight_details(params, "suboptimal", buffer_zones, suboptimal_zones)
-    print_configurations("Unsafe Configurations by Heading", params.runtime.unsafe_configurations or [])
-    print_flight_details(params, "unsafe", buffer_zones, suboptimal_zones)
-
-
-# =============================================================================
-# Safety plots
-# =============================================================================
-
-def build_safety_flight_groups(params: SimParams, safety_label: str):
-    """Build the flight-group dict for one safety label ("safe", "suboptimal" or "unsafe") from params.runtime."""
-    flight_groups = {
-        f"rocket_{scenario}": (get_flights(params, f"{safety_label}_rocket_{scenario}"), SCENARIO_COLORS[scenario])
-        for scenario in ("nominal", "no_main", "ballistic", "matched")
-    }
-    flight_groups["payload_nominal"] = (get_flights(params, f"{safety_label}_payload"), SCENARIO_COLORS["payload"])
-    return flight_groups
-
-
-def build_safety_by_config(params: SimParams):
-    """Build a {(environment, heading, inclination): 'safe'|'suboptimal'|'unsafe'} map from params.runtime."""
-    return {
-        configuration: safety_label
-        for safety_label in SAFETY_LABELS
-        for configuration in (getattr(params.runtime, f"{safety_label}_configurations") or [])
-    }
+    print_safety_summary(landing_points, label_by_heading, buffer_zones, suboptimal_zones)
+    return label_by_heading
 
 
 # =============================================================================
@@ -966,55 +980,43 @@ def add_compass_labels(figure: go.Figure):
         )
 
 
-def add_mode_flight_traces(
+def add_mode_point_traces(
     figure: go.Figure,
-    flight_groups: dict[str, tuple[list, str]],
+    landing_points: list[LandingPoint],
+    label_by_heading: dict[float, str],
     visible: bool,
-    safety_by_config: dict[tuple, str],
-):
-    """Add one Scatter trace per flight group for the given mode; return the trace index range."""
+) -> tuple[int, int]:
+    """Add one Scatter trace per scenario (colored like SCENARIO_COLORS) for one button mode; return the trace index range."""
     start_index = len(figure.data)
 
-    for label, (flights, color) in flight_groups.items():
-        flight_list = ensure_list(flights)
-
-        if not flight_list:
+    # SCENARIO_COLORS also fixes the legend order: nominal, no_main, ballistic, matched, payload.
+    for scenario, color in SCENARIO_COLORS.items():
+        scenario_points = [point for point in landing_points if point.scenario == scenario]
+        if not scenario_points:
             continue
 
-        x_values = [flight.x_impact for flight in flight_list]
-        y_values = [flight.y_impact for flight in flight_list]
-
-        customdata = [
-            [
-                flight.heading,
-                flight.inclination,
-                flight.env.name if hasattr(flight.env, "name") else flight.name,
-                safety_by_config.get(scenario_config_key(flight), "unknown"),
-                flight.latitude(flight.t_final),
-                flight.longitude(flight.t_final),
-                landing_distance(flight),
-            ]
-            for flight in flight_list
+        label = "payload_nominal" if scenario == "payload" else f"rocket_{scenario}"
+        # Each point gets its own hover text, because RocketPy and OpenRocket points carry different details.
+        hover_texts = [
+            f"<b>{label}</b><br>"
+            f"safety: {label_by_heading[point.heading]}<br>"
+            f"heading: {point.heading:g}°<br>"
+            f"inclination: {point.inclination:g}°<br>"
+            + "".join(f"{name}: {value}<br>" for name, value in point.configuration.items())
+            + f"impact: ({point.x_east_m:.1f}, {point.y_north_m:.1f}) m<br>"
+            f"distance from launch: {np.hypot(point.x_east_m, point.y_north_m):.0f} m<br>"
+            f"lat: {point.latitude:.5f}°; lon: {point.longitude:.5f}°"
+            for point in scenario_points
         ]
 
         figure.add_trace(go.Scatter(
-            x=x_values,
-            y=y_values,
+            x=[point.x_east_m for point in scenario_points],
+            y=[point.y_north_m for point in scenario_points],
             mode="markers",
             marker=dict(color=color, size=8),
             name=label,
-            customdata=customdata,
-            hovertemplate=(
-                f"<b>{label}</b><br>"
-                "safety: %{customdata[3]}<br>"
-                "heading: %{customdata[0]}°<br>"
-                "inclination: %{customdata[1]}°<br>"
-                "env: %{customdata[2]}<br>"
-                "impact: (%{x:.1f}, %{y:.1f}) m<br>"
-                "distance from launch: %{customdata[6]:.0f} m<br>"
-                "lat: %{customdata[4]:.5f}°; lon: %{customdata[5]:.5f}°"
-                "<extra></extra>"
-            ),
+            hovertext=hover_texts,
+            hovertemplate="%{hovertext}<extra></extra>",
             visible=visible,
             showlegend=visible,
         ))
@@ -1060,16 +1062,17 @@ def plot_landing_positions_with_modes(
     buffer_zones,
     suboptimal_zones,
     plot_name,
-    mode_flight_groups=None,
-    safety_by_config=None,
+    landing_points: list[LandingPoint] | None = None,
+    label_by_heading: dict[float, str] | None = None,
     zones_only=False,
     flight_computer_impacts=None,
     satellite_image: Path | None = None,
+    source: str = "",
 ):
-    """Build an interactive landing-position plot with optional flight-mode buttons.
+    """Build an interactive landing-position plot with All/Safe/Suboptimal/Unsafe buttons.
 
-    When zones_only is True only the zones are drawn. Otherwise one button per entry of
-    mode_flight_groups toggles which mode's markers are visible. satellite_image is an optional GeoTIFF background.
+    When zones_only is True only the zones are drawn. Otherwise the buttons switch between all landing_points and the
+    points of each safety label in label_by_heading (see classify_headings). satellite_image is an optional GeoTIFF background.
     """
     project_path = params.project_path
     ensure_project_folders(project_path)
@@ -1088,19 +1091,19 @@ def plot_landing_positions_with_modes(
         zone_trace_count = len(figure.data)
         zone_legend_flags = [trace.showlegend is not False for trace in figure.data]
 
-        # Add the flight traces grouped per mode and remember each mode's trace index range.
-        mode_flight_groups = mode_flight_groups or {}
-        mode_names = list(mode_flight_groups.keys())
-        default_mode = mode_names[0] if mode_names else None
-        mode_trace_ranges = {}
+        # One button per mode; a Safe/Suboptimal/Unsafe button only appears when that label has landing points.
+        landing_points = landing_points or []
+        points_by_mode = {"All": landing_points}
+        for safety_label in SAFETY_LABELS:
+            labeled_points = [point for point in landing_points if label_by_heading[point.heading] == safety_label]
+            if labeled_points:
+                points_by_mode[safety_label.capitalize()] = labeled_points
 
-        for mode_name, flight_groups in mode_flight_groups.items():
-            mode_trace_ranges[mode_name] = add_mode_flight_traces(
-                figure,
-                flight_groups,
-                visible=(mode_name == default_mode),
-                safety_by_config=safety_by_config or {},
-            )
+        # Add the point traces per mode ("All" visible first) and remember each mode's trace index range.
+        mode_trace_ranges = {
+            mode_name: add_mode_point_traces(figure, mode_points, label_by_heading, visible=(mode_name == "All"))
+            for mode_name, mode_points in points_by_mode.items()
+        }
 
         # Launch rail reference marker stays at the origin and stays visible in every mode.
         figure.add_trace(go.Scatter(
@@ -1147,7 +1150,7 @@ def plot_landing_positions_with_modes(
         gridcolor = "lightgray"
     
     figure.update_layout(
-        title=dict(text="Landing Positions", x=0.5, xanchor="center"),
+        title=dict(text=f"Landing Positions ({source})", x=0.5, xanchor="center"),
         xaxis=dict(
             title="East / West distance from launch rail [m]",
             scaleanchor="y",
@@ -1192,26 +1195,8 @@ def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, 
     scenario_sets = params.runtime.scenario_sets
     payload_flights = get_flights(params, "flight_payload")
 
-    nominal_flights, no_main_flights, ballistic_flights, matched_flights = split_flights_by_scenario(scenario_sets)
-    all_flight_groups = {
-        "rocket_nominal":  (nominal_flights, SCENARIO_COLORS["nominal"]),
-        "rocket_no_main":  (no_main_flights, SCENARIO_COLORS["no_main"]),
-        "rocket_ballistic": (ballistic_flights, SCENARIO_COLORS["ballistic"]),
-    }
-    if matched_flights:
-        all_flight_groups["rocket_matched"] = (matched_flights, SCENARIO_COLORS["matched"])
-    if payload_flights:
-        all_flight_groups["payload_nominal"] = (payload_flights, SCENARIO_COLORS["payload"])
-
-    calculate_safe_flights(params, buffer_zones, suboptimal_zones)
-    safety_by_config = build_safety_by_config(params)
-
-    # Only display a Safe/Suboptimal/Unsafe button when that group actually contains flights.
-    mode_flight_groups = {"All": all_flight_groups}
-    for safety_label in SAFETY_LABELS:
-        flight_groups = build_safety_flight_groups(params, safety_label)
-        if any(flights for flights, _color in flight_groups.values()):
-            mode_flight_groups[safety_label.capitalize()] = flight_groups
+    landing_points = landing_points_from_runtime(params)
+    label_by_heading = calculate_safe_flights(params, landing_points, buffer_zones, suboptimal_zones)
 
     flight_computer_impacts = ensure_list(params.runtime.flight_computer_impacts or [])
 
@@ -1221,10 +1206,11 @@ def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, 
         buffer_zones,
         suboptimal_zones,
         plot_name="landing_positions",
-        mode_flight_groups=mode_flight_groups,
-        safety_by_config=safety_by_config,
+        landing_points=landing_points,
+        label_by_heading=label_by_heading,
         flight_computer_impacts=flight_computer_impacts,
         satellite_image=satellite_image,
+        source="RocketPy"
     )
 
     if not has_variations(params.config):

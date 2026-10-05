@@ -78,33 +78,9 @@
           "title": "Max Expected Height"
         },
         "elevation": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "number"
-            },
-            {
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ]
-              },
-              "type": "array"
-            },
-            {
-              "pattern": "^\\s*-?\\d+(\\.\\d+)?\\s*\\.\\.\\s*-?\\d+(\\.\\d+)?\\s*:\\s*\\d+(\\.\\d+)?\\s*$",
-              "type": "string"
-            }
-          ],
-          "description": "Launch site elevation above sea level [m ASL].\n\nVariable: also accepts a list `[a, b, c]` or a range string `\"start..stop:step\"`; one flight per value.",
-          "title": "Elevation"
+          "description": "Launch site elevation above sea level [m ASL].",
+          "title": "Elevation",
+          "type": "number"
         },
         "timezone": {
           "description": "IANA timezone of the launch site. Applied to `date`.",

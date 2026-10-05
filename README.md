@@ -12,13 +12,14 @@ Lamarr_Flight_Simulation_RocketPy/
 │   ├── deployable_payload.py         simulates a separating payload as its own flight
 │   ├── outputs.py                    prints, plots, landing safety classification, KML/CSV export
 │   ├── reanalysis.py                 compares flight-computer data with the simulation after a flight
-│   ├── export_weather_data.py        downloads atmosphere profiles for 'custom_atmosphere'
+│   ├── export_weather_data.py        downloads atmosphere profiles for 'custom_atmosphere' and the OpenRocket wind profiles
 │   ├── kml_zones.py                  converts zones drawn in Google Earth (KML) to the zones.toml format
 │   ├── export_satellite_image.py     downloads a satellite image of the launch site as landing plot background
 │   ├── custom_print_and_plot_functions.py   additional prints and plots
 │   └── utils.py                      config and zone loading, variation handling, helpers
-├── jupyternb/                        Jupyter notebook
-│   └── simulation_orchestration.ipynb   the simulation pipeline: set PROJECT, then run all cells and writes report.html
+├── jupyternb/                        Jupyter notebooks
+│   ├── simulation_orchestration.ipynb   the simulation pipeline: set PROJECT, then run all cells and writes report.html
+│   └── plot_openrocket_landings.ipynb   stats, safety tables and landing plot of an OpenRocket parameter sweep
 ├── streamlit_app/                    Streamlit app
 │   ├── app.py                        pages: edit config.toml / zones.toml, run the simulation, view report and plots
 │   ├── config_form.py                config form, generated from the pydantic models
@@ -90,12 +91,17 @@ The landing zones in `zones.toml` can be drawn in Google Earth and imported from
 Each corner becomes `[distance_m, heading_deg]` (polar coordinates) from `launch_rail`, measured on the WGS84 ellipsoid (heading: 0 = North, 90 = East, clockwise).
 
 ### Satellite background
-
 The landing plots can show a satellite image behind the zones. Set `satellite_image` in `zones.toml`:
 
 - `satellite_image = "download"`: downloads the image on every run (needs internet) and saves it as `satellite_image.tif` in the project folder.
-  The size comes from `satellite_image_radius` (half side length in m); the zoom level is fixed at 16 (about 1.5 m per pixel). Drives the size and quality of the image.
+  The size comes from `satellite_image_radius` (half side length in m); the zoom level is fixed at 16 (about 1.5 m per pixel).
 - `satellite_image = "satellite_image.tif"` (or any other GeoTIFF in the project folder): uses that file, works offline.
+
+### OpenRocket landing positions
+Results of the OpenRocket parameter sweep can be shown like the RocketPy results (stats, safety tables, landing plot):
+1. `openrocket_parameter_sweep.ipynb` (OpenRocket repository) writes `openrocket_landing_positions.csv` into the project folder here. Can also use the OpenRocket wind profiles from `export_weather_data.py`.
+2. `jupyternb/plot_openrocket_landings.ipynb` reads it and saves the plot as `plots/openrocket_landing_positions.html`.
+
 
 ## Config files
 The config files are TOML files in the project folder: `projects/<PROJECT>/config.toml` and `projects/<PROJECT>/zones.toml`.

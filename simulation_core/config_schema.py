@@ -330,7 +330,7 @@ class EnvironmentConfig(_Base):
     latitude: float
     longitude: float
     max_expected_height: Annotated[float | list[float], FLOAT_RANGE_EXPANSION]
-    elevation: Annotated[float | list[float], FLOAT_RANGE_EXPANSION]
+    elevation: float
     timezone: str
     envType: Union[EnvironmentType, list[EnvironmentType]]
     reanalysis_csv: Optional[dict[str, str]] = None
@@ -964,36 +964,6 @@ class RuntimeParams(BaseModel):
         List of flight-computer impact dicts from reanalysis.
     reanalysis_flight_computer_data: 
         Dict of {env_name: loaded flight-computer data}.
-    safe_rocket_nominal: 
-        Safe nominal rocket flights (safety analysis).
-    safe_rocket_no_main: 
-        Safe no-main rocket flights (safety analysis).
-    safe_rocket_ballistic: 
-        Safe ballistic rocket flights (safety analysis).
-    safe_rocket_matched: 
-        Safe matched rocket flights (safety analysis).
-    safe_configurations: 
-        List of (env, heading, inclination) tuples classified as safe.
-    unsafe_rocket_nominal: 
-        Unsafe nominal rocket flights (safety analysis).
-    unsafe_rocket_no_main: 
-        Unsafe no-main rocket flights (safety analysis).
-    unsafe_rocket_ballistic: 
-        Unsafe ballistic rocket flights (safety analysis).
-    unsafe_rocket_matched: 
-        Unsafe matched rocket flights (safety analysis).
-    unsafe_configurations: 
-        List of (env, heading, inclination) tuples classified as unsafe.
-    suboptimal_rocket_nominal, suboptimal_rocket_no_main, suboptimal_rocket_ballistic, suboptimal_rocket_matched:
-        Flights of headings that are safe but land in a suboptimal zone (safety analysis).
-    suboptimal_configurations:
-        List of (env, heading, inclination) tuples classified as suboptimal.
-    safe_payload:
-        Safe payload flights (safety analysis).
-    suboptimal_payload:
-        Suboptimal payload flights (safety analysis).
-    unsafe_payload:
-        Unsafe payload flights (safety analysis).
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -1014,24 +984,6 @@ class RuntimeParams(BaseModel):
     gnss_3d_traces: Optional[dict] = None
     flight_computer_impacts: Optional[list] = None
     reanalysis_flight_computer_data: Optional[dict] = None
-    safe_rocket_nominal: Optional[list] = None
-    safe_rocket_no_main: Optional[list] = None
-    safe_rocket_ballistic: Optional[list] = None
-    safe_rocket_matched: Optional[list] = None
-    safe_configurations: Optional[list] = None
-    unsafe_rocket_nominal: Optional[list] = None
-    unsafe_rocket_no_main: Optional[list] = None
-    unsafe_rocket_ballistic: Optional[list] = None
-    unsafe_rocket_matched: Optional[list] = None
-    unsafe_configurations: Optional[list] = None
-    suboptimal_rocket_nominal: Optional[list] = None
-    suboptimal_rocket_no_main: Optional[list] = None
-    suboptimal_rocket_ballistic: Optional[list] = None
-    suboptimal_rocket_matched: Optional[list] = None
-    suboptimal_configurations: Optional[list] = None
-    safe_payload: Optional[list] = None
-    suboptimal_payload: Optional[list] = None
-    unsafe_payload: Optional[list] = None
 
 
 class SimParams(BaseModel):
