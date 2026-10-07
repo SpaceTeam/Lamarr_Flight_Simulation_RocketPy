@@ -38,6 +38,10 @@ Lamarr_Flight_Simulation_RocketPy/
 ## Initial setup (once after cloning from GitHub)
 1. Use **Python 3.14**
 2. **Create one virtual environment** for each project, so each one can have it's own RocketPy version and thus the simulation results do not change, if you run it again later.
+   - First, change into the project's folder
+   - Run `py -3.14 -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
+   - If there is an error, use `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` (Windows)
+   - To deactivate the venv, use `deactivate`
 
 3. **Install the packages:** `pip install -r requirements.txt` (adjust rocketpy version if needed)
 4. **Install the git helpers** (run inside the repo folder, with the venv active):
@@ -48,7 +52,7 @@ Lamarr_Flight_Simulation_RocketPy/
    - **Tombi** (`tombi-toml.tombi`): autocomplete with `Ctrl+Space`, hover help and error checking in the TOML files.
    - **Run on Save** (`pucelle.run-on-save`): regenerates `simulation_core/config_schemas/` and restarts Tombi when `simulation_core/config_schema.py` is saved.
    - Disable **Even Better TOML** if it is installed, so the TOML files are not checked twice.
-6. **Select the venv as Python interpreter** (`Python: Select Interpreter`) and as notebook kernel. Run on Save uses this interpreter too.
+6. **Select the venv as Python interpreter** (Press `Ctrl + Shift + P` inside VSCode then select `Python: Select Interpreter`) and as notebook kernel. Run on Save uses this interpreter too.
 7. If you open the project through a `.code-workspace` file, copy `runOnSave.commands` from `.vscode/settings.json` into its `settings`:
    VS Code ignores this setting in folder settings when a workspace file is opened.
 8. **Run a simulation**, one of:
