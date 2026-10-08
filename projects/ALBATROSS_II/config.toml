@@ -8,10 +8,10 @@ scenarios = ["nominal", "ballistic", "no_main"]
 [environment]
 date = "tomorrow_08_local"  # todo: update time to 2026-10-25TXX:00:00
 # date = 2026-10-08T19:00:00
-latitude = 53.4781029  # todo: update when known exactly (Drawsko Pomorskie Military Site)
-longitude = 15.7302372  # todo: update when known exactly
+latitude = 53.3564167  # todo: update when known exactly (Drawsko Pomorskie Military Site)
+longitude = 15.6361944  # todo: update when known exactly
 max_expected_height = 7000
-elevation = 123.8920653  # todo: update when known exactly
+elevation = 110.92  # todo: update when known exactly
 timezone = "Europe/Berlin"
 
 # online
