@@ -39,7 +39,7 @@ Lamarr_Flight_Simulation_RocketPy/
 1. Use **Python 3.14**
 2. **Create one virtual environment** for each project, so each one can have it's own RocketPy version and thus the simulation results do not change, if you run it again later.
    - First, change into the project's folder
-   - Run `py -3.14 -m venv .venv` then `.\.venv\Scripts\Activate.ps1`
+   - Run `py -3.14 -m venv .venv_<project>` then `.\.venv_<project>\Scripts\Activate.ps1`
    - If there is an error, use `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` (Windows)
    - To deactivate the venv, use `deactivate`
 
