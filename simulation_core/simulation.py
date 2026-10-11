@@ -700,8 +700,8 @@ def create_rocket(params: SimParams):
 def create_flight(params: SimParams):
     """Create one flight per scenario for every environment and config combination; assumes environment, engine and rocket exist.
 
-    - A rocket component is varied (fins, motor, nosecone, main/drogue parachute, ...): one "nominal" flight per 
-        rocket component combination and per environment.
+    - A rocket component is varied (fins, motor, nosecone, main/drogue parachute, ...): engine and rocket are rebuilt for every
+        combination, then one flight per scenario, per environment and combination.
     - A deployable payload is present: one "nominal" flight per environment and mass variation, plus one flight per scenario.
         Ascent is simulated once per environment and mass, and reused by that mass's scenario flights.
         The payload flight starts at that apogee.
@@ -725,15 +725,12 @@ def create_flight(params: SimParams):
         raise ValueError('config.scenarios must contain "nominal": the safety analysis and deployable payload build on it.')
 
     has_payload = deployable_payload.has_deployable_payload(params)
-    # When rocket components vary, only the nominal scenario is produced per combination.
-    # Payload and flight-parameter variations still produce all selected scenarios.
-    only_nominal_variation = has_rocket_component_variations(params.config)
-    rebuild_rocket = only_nominal_variation
+    # Engine and rocket are rebuilt per combination only when a rocket component is varied.
+    rebuild_rocket = has_rocket_component_variations(params.config)
 
-    scenarios_to_build = ["nominal"] if only_nominal_variation else selected_scenarios
     has_drogue_base = params.config.parachutes.drogue is not None
     # no_main is only simulated when there is a drogue to fall back on.
-    scenarios_per_combo = len([name for name in scenarios_to_build if name != "no_main" or has_drogue_base])
+    scenarios_per_combo = len([name for name in selected_scenarios if name != "no_main" or has_drogue_base])
     # Ascent is simulated separately only when several descent scenarios reuse it, or when a deployable payload needs it.
     reuse_ascent_flights = (has_variations(params.config) and scenarios_per_combo > 1) or has_payload
 
@@ -777,7 +774,7 @@ def create_flight(params: SimParams):
         payload_mass_total = combo_config.payload.mass_total if isinstance(combo_config.payload.mass_total, (int, float)) else 0
         payload_CG_from_tip = combo_config.payload.CG_from_tip
         payload_position_m = None if payload_CG_from_tip is None else get_position_from_tip(payload_CG_from_tip, millimeters_to_meters(combo_config.rocket.length))
-        scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, scenarios_to_build, payload_mass_total, payload_position_m)
+        scenario_rockets = build_scenario_rockets(combo_params.runtime.rocket, has_drogue, selected_scenarios, payload_mass_total, payload_position_m)
         # RocketPy adds parachute pressure data to the rocket object during flight. A fresh copy for each combination flight avoids 
         # accumulating parachute data from previous flights (memory leak).
         ascent_rocket = copy.deepcopy(combo_params.runtime.rocket) if reuse_ascent_flights else None

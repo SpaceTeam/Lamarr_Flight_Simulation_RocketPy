@@ -178,8 +178,7 @@ When any field is varied, the flight ascent is simulated once per combination an
 | nothing (single flight) | standard / forecast / custom | nominal + no-main + ballistic | pre-built once |
 | nothing (single flight) | reanalysis | nominal only (+ matched flight from reanalysis section) | pre-built once |
 | `payload.mass_total` and/or `parachutes.payload.*` and/or flight parameters only (`heading`, `inclination`, `rail_length`) | any | nominal + no-main + ballistic | pre-built once |
-| any rocket component field | any | nominal only | rebuilt per combination |
-| rocket components + flight parameters mixed | any | nominal only | rebuilt per combination |
+| any rocket component field (also mixed with flight parameters) | any | nominal + no-main + ballistic | rebuilt per combination |
 
 ### Rocket component sections
 Varying any field here triggers a per-combo rebuild:
