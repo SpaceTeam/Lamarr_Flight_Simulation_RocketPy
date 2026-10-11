@@ -34,6 +34,10 @@ NOTEBOOK_SAVE_TIMEOUT_S = 30
 NOTEBOOK_SAVE_POLL_INTERVAL_S = 0.5
 HEADLESS_ENV_VAR = "SIMULATION_HEADLESS"        # set by run_simulation.py
 MAX_PLOTLY_BUTTONS = 5
+TRAJECTORY_PLOT_WIDTH_PX = 1500
+TRAJECTORY_PLOT_SCENE_HEIGHT_PX = 600          # 3D trajectory plot height without its legend
+TRAJECTORY_PLOT_FLIGHT_LIMIT = 300
+_CUSTOM_PLOTS_FLIGHT_LIMIT = 13
 SUPERSONIC_MACH = 1.2
 SATELLITE_JPEG_QUALITY = 85                     # JPEG keeps the embedded image (and thus the HTML) far smaller than PNG
 # Stats table columns shared by RocketPy and OpenRocket: metric key -> (header, decimal places). The keys are also the metric
@@ -188,9 +192,6 @@ def plot_one_flight_with_custom_plots(params: SimParams, flight: Flight, scenari
         custom_plots.plot_motion_over_time()
 
 
-_CUSTOM_PLOTS_FLIGHT_LIMIT = 13
-
-
 def plot_all_flights_with_custom_plots(params: SimParams, scenario_sets):
     """Plot all scenario flights together in grouped CustomPlots with one button per flight."""
     flights = []
@@ -308,24 +309,92 @@ def add_plotly_buttons(
     )
 
 
+@dataclass
+class Trajectory3D:
+    """One flight path for the 3D trajectory plot, shared by RocketPy and OpenRocket."""
+    name: str                       # legend label
+    environment: str                # the environment buttons group traces by this
+    scenario: str                   # key of SCENARIO_COLORS, e.g. "nominal"; "other" gets the default Plotly color
+    x_east_m: np.ndarray
+    y_north_m: np.ndarray
+    altitude_agl_m: np.ndarray
+
+
+@dataclass
+class WindColumn:
+    """Wind of one environment at several altitudes, drawn as a column of cones above the launch rail."""
+    environment: str
+    altitude_agl_m: np.ndarray
+    wind_u_m_s: np.ndarray          # eastward wind component; positive = air moves towards east
+    wind_v_m_s: np.ndarray          # northward wind component; positive = air moves towards north
+    wind_speed_m_s: np.ndarray
+    wind_heading_deg: np.ndarray    # direction the wind blows towards, clockwise from north
+
+
 def compare_trajectories(params: SimParams, flights: list[Flight]):
-    """Interactive 3D trajectory plot with optional GNSS overlays from reanalysis.
+    """Convert RocketPy flights (and their shared ascents) into trajectories and wind columns, then draw the 3D plot."""
+    trajectories = []
+    shared_ascents = list(dict.fromkeys(flight.ascent_flight for flight in flights if getattr(flight, "ascent_flight", None) is not None))
+    for flight in [*shared_ascents, *flights]:
+        env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
+        # Match the scenario keyword inside the name so SCENARIO_COLORS picks the right color.
+        scenario = next((scenario for scenario in SCENARIO_COLORS if scenario in (getattr(flight, "name", "") or "")), "other")
+        # Use flat metadata label when available — flight.name may contain newlines from obj_to_pretty_label.
+        if hasattr(flight, "_meta") and flight._meta:
+            display_name = f"{', '.join(render_meta_flat(flight._meta))} | {scenario}"
+        else:
+            display_name = f"{env_name} | {scenario}"
+        times = np.asarray(flight.time)
+        trajectories.append(Trajectory3D(
+            name=display_name,
+            environment=env_name,
+            scenario=scenario,
+            x_east_m=np.array([flight.x(t) for t in times]),
+            y_north_m=np.array([flight.y(t) for t in times]),
+            altitude_agl_m=np.array([flight.altitude(t) for t in times]),
+        ))
+
+    # One wind column per environment, sampled up to the highest point any of its flights reaches.
+    environments = {(flight.env.name if hasattr(flight.env, "name") else flight.name): flight.env for flight in flights}
+    wind_columns = []
+    for env_name, environment in environments.items():
+        max_trajectory_altitude = max(
+            np.nanmax(trajectory.altitude_agl_m) for trajectory in trajectories if trajectory.environment == env_name
+        )
+        altitudes_agl = np.linspace(0.0, max_trajectory_altitude, 20)
+        # RocketPy wind functions expect altitude ASL, so add environment.elevation.
+        altitudes_asl = altitudes_agl + environment.elevation
+        wind_columns.append(
+            WindColumn(
+                environment=env_name,
+                altitude_agl_m=altitudes_agl,
+                wind_u_m_s=np.array([environment.wind_velocity_x(z) for z in altitudes_asl], dtype=float),
+                wind_v_m_s=np.array([environment.wind_velocity_y(z) for z in altitudes_asl], dtype=float),
+                wind_speed_m_s=np.array([environment.wind_speed(z) for z in altitudes_asl], dtype=float),
+                wind_heading_deg=np.array([environment.wind_heading(z) for z in altitudes_asl], dtype=float),
+            )
+        )
+
+    plot_3d_trajectories(params, trajectories, wind_columns)
+
+
+def plot_3d_trajectories(
+    params: SimParams,
+    trajectories: list[Trajectory3D],
+    wind_columns: list[WindColumn],
+    plot_name: str = "compare_trajectories",
+):
+    """Interactive 3D trajectory plot with wind cones and optional GNSS overlays from reanalysis.
 
     When multiple environments are present, buttons group traces by environment.
     """
+    # Too many trajectories make the HTML huge and the browser slow, so skip the plot above the limit.
+    if len(trajectories) > TRAJECTORY_PLOT_FLIGHT_LIMIT:
+        print(f"3D trajectory plot skipped: {len(trajectories)} trajectories exceed the {TRAJECTORY_PLOT_FLIGHT_LIMIT}-trajectory limit.")
+        return
+
     figure = go.Figure()
-
-    # Build environment groups before adding any traces so we can track per-environment indices.
-    environment_flight_groups = {}
-    env_names_ordered = []
-    for flight in flights:
-        env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
-        if env_name not in environment_flight_groups:
-            environment_flight_groups[env_name] = {"environment": flight.env, "flights": []}
-            env_names_ordered.append(env_name)
-        environment_flight_groups[env_name]["flights"].append(flight)
-
-    multiple_envs = len(env_names_ordered) > 1
+    env_names_ordered = list(dict.fromkeys(trajectory.environment for trajectory in trajectories))
     env_trace_indices = {name: [] for name in env_names_ordered}
     all_x_values = []
     all_y_values = []
@@ -333,69 +402,41 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
     # -------------------------------------------------------------------------
     # Simulated flight traces: x, y in local meters from launch; altitude is AGL
     # -------------------------------------------------------------------------
-    shared_ascents = list(dict.fromkeys(flight.ascent_flight for flight in flights if getattr(flight, "ascent_flight", None) is not None))
-    for flight in [*shared_ascents, *flights]:
-        env_name = flight.env.name if hasattr(flight.env, "name") else flight.name
-        scenario = next((scenario for scenario in SCENARIO_COLORS if scenario in (getattr(flight, "name", "") or "")), "other")
-        times = np.asarray(flight.time)
-        # Match the scenario keyword inside the name so SCENARIO_COLORS picks the right color.
-        color = next((c for scenario, c in SCENARIO_COLORS.items() if scenario in (getattr(flight, "name", "") or "")), None)
-        # Use flat metadata label when available — flight.name may contain newlines from obj_to_pretty_label.
-        if hasattr(flight, "_meta") and flight._meta:
-            display_name = f"{', '.join(render_meta_flat(flight._meta))} | {scenario}"
-        else:
-            display_name = f"{env_name} | {scenario}"
-        x_values = np.array([flight.x(t) for t in times])
-        y_values = np.array([flight.y(t) for t in times])
-        all_x_values.append(x_values)
-        all_y_values.append(y_values)
-        idx = len(figure.data)
+    for trajectory in trajectories:
+        color = SCENARIO_COLORS.get(trajectory.scenario)
+        all_x_values.append(trajectory.x_east_m)
+        all_y_values.append(trajectory.y_north_m)
+        env_trace_indices[trajectory.environment].append(len(figure.data))
         figure.add_trace(go.Scatter3d(
-            x=x_values,
-            y=y_values,
-            z=np.array([flight.altitude(t) for t in times]),
+            x=trajectory.x_east_m,
+            y=trajectory.y_north_m,
+            z=trajectory.altitude_agl_m,
             mode="lines",
-            name=display_name,
+            name=trajectory.name,
             line=dict(color=color, width=3) if color else dict(width=3),
             hoverlabel=dict(namelength=-1),
         ))
-        env_trace_indices[env_name].append(idx)
 
     # -------------------------------------------------------------------------
     # Wind heading arrows, one cone column per environment
     # -------------------------------------------------------------------------
-    for env_name, environment_group in environment_flight_groups.items():
-        environment = environment_group["environment"]
-        environment_flights = environment_group["flights"]
-
-        max_trajectory_altitude = max(
-            float(np.nanmax([flight.altitude(t) for t in np.asarray(flight.time)]))
-            for flight in environment_flights
-        )
-        wind_altitude_samples = np.linspace(0.0, max_trajectory_altitude, 20)
-
-        # RocketPy wind functions expect altitude ASL, so add environment.elevation.
-        wind_u = np.array([environment.wind_velocity_x(z + environment.elevation) for z in wind_altitude_samples], dtype=float)
-        wind_v = np.array([environment.wind_velocity_y(z + environment.elevation) for z in wind_altitude_samples], dtype=float)
-        wind_speed = np.array([environment.wind_speed(z + environment.elevation) for z in wind_altitude_samples], dtype=float)
-        wind_heading = np.array([environment.wind_heading(z + environment.elevation) for z in wind_altitude_samples], dtype=float)
-
-        idx = len(figure.data)
+    for wind_column in wind_columns:
+        env_trace_indices[wind_column.environment].append(len(figure.data))
         figure.add_trace(go.Cone(
-            x=np.zeros_like(wind_altitude_samples),
-            y=np.zeros_like(wind_altitude_samples),
-            z=wind_altitude_samples,
-            u=wind_u,
-            v=wind_v,
-            w=np.zeros_like(wind_altitude_samples),
-            name=f"Wind heading: {env_name}",
+            x=np.zeros_like(wind_column.altitude_agl_m),
+            y=np.zeros_like(wind_column.altitude_agl_m),
+            z=wind_column.altitude_agl_m,
+            u=wind_column.wind_u_m_s,
+            v=wind_column.wind_v_m_s,
+            w=np.zeros_like(wind_column.altitude_agl_m),
+            name=f"Wind heading: {wind_column.environment}",
             colorscale=[[0, "blue"], [1, "blue"]],
             showscale=False,
             showlegend=True,
             sizemode="scaled",
             sizeref=2.0,
             anchor="tail",
-            customdata=np.column_stack([wind_speed, wind_heading]),
+            customdata=np.column_stack([wind_column.wind_speed_m_s, wind_column.wind_heading_deg]),
             hovertemplate=(
                 "<b>Wind</b><br>"
                 "altitude: %{z:.0f} m AGL<br>"
@@ -404,7 +445,6 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
                 "<extra></extra>"
             ),
         ))
-        env_trace_indices[env_name].append(idx)
 
     always_visible_indices = []
     gnss_traces = params.runtime.gnss_3d_traces
@@ -442,7 +482,7 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
     # -------------------------------------------------------------------------
     # Environment-grouping buttons (only when multiple environments are present)
     # -------------------------------------------------------------------------
-    if multiple_envs:
+    if len(env_names_ordered) > 1:
         mode_trace_indices = {name: env_trace_indices[name] for name in env_names_ordered}
         # The first button is active by default; hide every trace that doesn't belong to it.
         first_mode_indices = set(next(iter(mode_trace_indices.values())))
@@ -458,6 +498,15 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
     x_center = (all_x.max() + all_x.min()) / 2
     y_center = (all_y.max() + all_y.min()) / 2
 
+    # Grow the figure by the legend; a button shows one environment, so each environment's legend is one group.
+    legend_label_groups = [
+        [figure.data[index].name for index in [*indices, *always_visible_indices]]
+        for indices in env_trace_indices.values()
+    ]
+    figure_height_px = TRAJECTORY_PLOT_SCENE_HEIGHT_PX + bottom_legend_height_px(
+        legend_label_groups, TRAJECTORY_PLOT_WIDTH_PX
+    )
+
     figure.update_layout(
         title="3D Trajectory Comparison",
         scene=dict(
@@ -469,15 +518,18 @@ def compare_trajectories(params: SimParams, flights: list[Flight]):
                 # x rotates camera east with pos values
                 # y rotates camera north with pos values
                 # z controls elevation: bigger = looking down at a steeper angle
-                eye=dict(x=0.1, y=-2.3, z=0.2),
+                eye=dict(x=0.085, y=-1.95, z=0.17),
+                # Look at a point below the cube's middle, so the cube moves up into the empty space under the buttons
+                center=dict(x=0, y=0, z=-0.15),
             ),
         ),
         hoverlabel=dict(namelength=-1),
-        width=900,
-        height=700,
+        legend=dict(orientation="h", x=0, xanchor="left", y=0, yanchor="top"),
+        width=TRAJECTORY_PLOT_WIDTH_PX,
+        height=figure_height_px,
     )
 
-    figure.write_html(str(params.project_path / "plots" / "compare_trajectories.html"))
+    figure.write_html(str(params.project_path / "plots" / f"{plot_name}.html"))
     figure.show(renderer="notebook")
 
 
@@ -1190,9 +1242,8 @@ def plot_landing_positions_with_modes(
 def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, suboptimal_zones, satellite_image: Path | None = None):
     """Run the notebook display mode that fits the config: a single flight or variations.
 
-    Both modes share the same All/Safe/Suboptimal/Unsafe landing-positions plot. Single-flight mode adds a
-    per-flight safety summary, trajectory comparison, and detailed per-scenario prints/plots.
-    With variations, the trajectory comparison is only drawn up to _CUSTOM_PLOTS_FLIGHT_LIMIT flights.
+    Both modes share the same All/Safe/Suboptimal/Unsafe landing-positions plot and the 3D trajectory comparison.
+    Single-flight mode adds detailed per-scenario prints.
     """
     scenario_sets = params.runtime.scenario_sets
     payload_flights = get_flights(params, "flight_payload")
@@ -1215,29 +1266,15 @@ def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, 
         source="RocketPy"
     )
 
-    if not has_variations(params.config):
-        all_flights = [flight for scenario_set in scenario_sets for flight in scenario_set.values()]
-        all_flights.extend(payload_flights)
-        compare_trajectories(params, all_flights)
+    all_flights = [flight for scenario_set in scenario_sets for flight in scenario_set.values()]
+    all_flights.extend(payload_flights)
+    compare_trajectories(params, all_flights)
 
+    if not has_variations(params.config):
         for scenario_set in scenario_sets:
             for scenario_name, flight in scenario_set.items():
                 print_flight_section_heading(flight, scenario_name)
                 print_one_flight_with_custom_prints(flight, params.config.rocket)
 
-        if params.config.output_level >= 1:
-            plot_all_flights_with_custom_plots(params, scenario_sets)
-
-    else:
-        all_flights = [flight for scenario_set in scenario_sets for flight in scenario_set.values()]
-        all_flights.extend(payload_flights)
-        if len(all_flights) <= _CUSTOM_PLOTS_FLIGHT_LIMIT:
-            compare_trajectories(params, all_flights)
-        else:
-            print(
-                f"compare_trajectories skipped: {len(all_flights)} flights exceed the "
-                f"{_CUSTOM_PLOTS_FLIGHT_LIMIT}-flight limit."
-            )
-
-        if params.config.output_level >= 1:
-            plot_all_flights_with_custom_plots(params, scenario_sets)
+    if params.config.output_level >= 1:
+        plot_all_flights_with_custom_plots(params, scenario_sets)
