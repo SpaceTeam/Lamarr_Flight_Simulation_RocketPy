@@ -45,12 +45,12 @@ center_of_dry_mass_factor = 0.49  # estimated (more weight at nozzle end when ta
 thrust = "Cesaroni_9977M2245-P.eng"
 
 [rocket]
-total_mass_without_motor = [6426, 8426, 8926]                   # 0 kg, 2 kg, 2.5 kg payload; todo: update with real value (estimated)
+total_mass_without_motor = [6355, 8355, 8855]                   # 0 kg, 2 kg, 2.5 kg payload; todo: update with real value (estimated)
 length = 2296  # todo: update with real value (estimated)
-total_CG_without_motor_from_tip = [1137.605, 942.043, 906.845]  # 0 kg, 2 kg, 2.5 kg payload; todo: update with real value (estimated)
+total_CG_without_motor_from_tip = [1125.731, 931.349, 896.473]  # 0 kg, 2 kg, 2.5 kg payload; todo: update with real value (estimated)
 diameter = 134.2
-moment_of_intertia_Z = [0.018074, 0.019163, 0.019435]           # 0 kg, 2 kg, 2.5 kg payload; todo: update with real value (estimated)
-moment_of_intertia_XY = [2.010615, 3.055366, 3.244056]          # 0 kg, 2 kg, 2.5 kg payload; todo: update with real value (estimated)
+moment_of_intertia_Z = [0.018076, 0.019165, 0.019437]           # 0 kg, 2 kg, 2.5 kg payload; todo: update with real value (estimated)
+moment_of_intertia_XY = [1.932504, 2.944966, 3.127281]          # 0 kg, 2 kg, 2.5 kg payload; todo: update with real value (estimated)
 power_off_drag = "power_off_drag.csv"
 power_on_drag = "power_on_drag.csv"
 
