@@ -44,9 +44,9 @@ JSON_SCHEMA_TYPES_BY_PYTHON_TYPE = {
 }
 # Config fields that are varied pairwise and thus must have the same number of values.
 PAIRED_VARIATIONS = [
-    (("rocket", "total_mass_without_motor"), ("rocket", "total_CG_without_motor_from_tip")),
+    (("rocket", "total_mass_without_motor"), ("rocket", "total_CG_without_motor_from_tip"), 
+     ("rocket", "moment_of_intertia_Z"), ("rocket", "moment_of_intertia_XY")),
 ]
-
 
 # =============================================================================
 # Allowed string values
