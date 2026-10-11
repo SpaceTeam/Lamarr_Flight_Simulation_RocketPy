@@ -19,3 +19,5 @@ projects/ALBATROSS_II/plots/openrocket_landing_positions.html
 projects/ALBATROSS/variation_stats.xlsx
 projects/ALBATROSS_II/ALBATROSS_II_stats.xlsx
 projects/ALBATROSS_II/openrocket_trajectories.csv
+projects/ALBATROSS_II/plots/rocketpy_3D_trajectories.html
+projects/ALBATROSS_II/plots/openrocket_3D_trajectories.html
