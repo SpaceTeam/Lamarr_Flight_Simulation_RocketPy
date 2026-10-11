@@ -37,7 +37,7 @@ MAX_PLOTLY_BUTTONS = 5
 TRAJECTORY_PLOT_WIDTH_PX = 1500
 TRAJECTORY_PLOT_SCENE_HEIGHT_PX = 600          # 3D trajectory plot height without its legend
 TRAJECTORY_PLOT_FLIGHT_LIMIT = 300
-_CUSTOM_PLOTS_FLIGHT_LIMIT = 13
+_CUSTOM_PLOTS_FLIGHT_LIMIT = 35
 SUPERSONIC_MACH = 1.2
 SATELLITE_JPEG_QUALITY = 85                     # JPEG keeps the embedded image (and thus the HTML) far smaller than PNG
 # Stats table columns shared by RocketPy and OpenRocket: metric key -> (header, decimal places). The keys are also the metric
@@ -382,7 +382,7 @@ def plot_3d_trajectories(
     params: SimParams,
     trajectories: list[Trajectory3D],
     wind_columns: list[WindColumn],
-    plot_name: str = "compare_trajectories",
+    source: str = "RocketPy",
 ):
     """Interactive 3D trajectory plot with wind cones and optional GNSS overlays from reanalysis.
 
@@ -508,7 +508,7 @@ def plot_3d_trajectories(
     )
 
     figure.update_layout(
-        title="3D Trajectory Comparison",
+        title=f"3D Trajectory Comparison ({source})",
         scene=dict(
             xaxis=dict(title="East / West [m]", range=[x_center - half_span, x_center + half_span]),
             yaxis=dict(title="North / South [m]", range=[y_center - half_span, y_center + half_span]),
@@ -529,9 +529,8 @@ def plot_3d_trajectories(
         height=figure_height_px,
     )
 
-    figure.write_html(str(params.project_path / "plots" / f"{plot_name}.html"))
+    figure.write_html(str(params.project_path / "plots" / f"{source.lower()}_3D_trajectories.html"))
     figure.show(renderer="notebook")
-
 
 # =============================================================================
 # Exports
