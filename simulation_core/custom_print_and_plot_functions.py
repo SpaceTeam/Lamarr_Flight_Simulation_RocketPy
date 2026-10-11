@@ -8,7 +8,7 @@ from rocketpy import SolidMotor, LiquidMotor, HybridMotor, Rocket, Flight, Parac
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 
-from simulation_core.utils import flight_reached_ground
+from simulation_core.utils import bottom_legend_height_px, flight_reached_ground
 
 GRAVITY = 9.81                    # m/s²
 INFLATION_WINDOW_S = 0.25
@@ -413,16 +413,16 @@ class CustomPlots:
         yaxis2_dtick: float | int | None = None,
         width: int = 1100,
         height: int = 500,
-        legend_x_pos: float = 1.12,
-        buttons_x_pos=1.1,
     ):
         """
         Create a Plotly plot where buttons switch between one flight group at a time.
+        height is the plot without its legend; the figure grows by the legend below it.
         """
         figure = go.Figure()
         visibility = []
         marker_shapes = []
         marker_annotations = []
+        group_trace_names = []      # legend labels per flight group, for the figure height
 
         is_single_group = len(flight_groups) == 1
 
@@ -438,6 +438,7 @@ class CustomPlots:
             # instead of "CATS Vega - Altitude [m]"). In multi-group plots the prefix disambiguates groups.
             label_prefix = "" if is_single_group else f"{flight_group['label']} - "
             hover_prefix = "" if is_single_group else f"{flight_group['label']}<br>Time: %{{x:.1f}} s, "
+            group_trace_names.append([f"{label_prefix}{trace['name']}" for trace in flight_group["traces"]])
 
             for trace in flight_group["traces"]:
                 scatter_options = {
@@ -471,6 +472,10 @@ class CustomPlots:
         all_time_start = min(flight_group["time_start"] for flight_group in flight_groups)
         all_time_end = max(flight_group["time_end"] for flight_group in flight_groups)
 
+        # The legend sits below the plot; "All" lists every trace and each group button only its own, so both count.
+        all_trace_names = [trace.name for trace in figure.data]
+        figure_height = height + bottom_legend_height_px([all_trace_names, *group_trace_names], width)
+
         layout_settings = {
             "title": {
                 "text": title,
@@ -478,7 +483,7 @@ class CustomPlots:
                 "xanchor": "center",
             },
             "width": width,
-            "height": height,
+            "height": figure_height,
             "xaxis": {
                 "title": "Time [s]",
                 "range": [all_time_start, all_time_end + 1],
@@ -486,13 +491,7 @@ class CustomPlots:
                 "hoverformat": ".3f",
             },
             "yaxis": yaxis_settings,
-            "legend": {
-                "orientation": "v",
-                "yanchor": "top",
-                "y": 1,
-                "xanchor": "left",
-                "x": legend_x_pos,
-            },
+            "legend": {"orientation": "h", "x": 0, "xanchor": "left", "y": -0.1, "yanchor": "top"},
             "shapes": all_marker_shapes,
             "annotations": all_marker_annotations,
             "template": "plotly_white",
@@ -566,15 +565,14 @@ class CustomPlots:
             layout_settings["updatemenus"] = [
                 {
                     "buttons": buttons,
-                    "direction": "up",
+                    "direction": "down",
                     "showactive": True,
-                    "x": buttons_x_pos,
-                    "xanchor": "right",
-                    "y": -0.05,
-                    "yanchor": "top",
+                    "x": 0,
+                    "xanchor": "left",
+                    "y": 1.02,
+                    "yanchor": "bottom",
                 }
             ]
-            layout_settings["margin"] = {"b": 80}
 
         figure.update_layout(**layout_settings)
 
@@ -891,8 +889,6 @@ class CustomPlots:
             yaxis_title="Angular rate [°/s]",
             width=1500,
             height=800,
-            legend_x_pos=1.02,
-            buttons_x_pos=1,
         )
 
 
@@ -999,8 +995,6 @@ class CustomPlots:
             yaxis2_title="Acceleration [m/s^2]",
             width=1500,
             height=800,
-            legend_x_pos=1.05,
-            buttons_x_pos=1,
         )
 
     @staticmethod

@@ -17,6 +17,10 @@ from simulation_core.export_satellite_image import DOWNLOAD_KEYWORD, download_sa
 FLIGHT_MAX_TIME_S = 3600            # RocketPy's 600 s default cuts off long descents (e.g. main at apogee)
 FLIGHT_MAX_TIME_STEP_S = 0.1        # upper limit per solver step; the uncapped first step (~max_time/1000 = 3.6 s) can jump over a whole motor burn
 GROUND_HIT_TOLERANCE_M = 1.0        # final altitude AGL below which a flight counts as landed
+PLOTLY_SIDE_MARGINS_PX = 160        # Plotly's default 80 px left + right margin; a horizontal legend wraps at the remaining width
+LEGEND_ROW_HEIGHT_PX = 20           # Plotly's default legend entry height at font size 12
+LEGEND_CHAR_WIDTH_PX = 7            # approximate width of one label character at font size 12
+LEGEND_ENTRY_PADDING_PX = 40        # legend symbol plus the gap to the next entry
 
 
 def printmd(string):
@@ -37,6 +41,25 @@ def show_errors_without_traceback(*exception_types: type[BaseException]) -> None
     shell = get_ipython()
     if shell is not None:
         shell.set_custom_exc(exception_types, _show_error_message_only)
+
+
+def bottom_legend_height_px(legend_label_groups: list[list[str]], figure_width_px: int) -> int:
+    """Estimate the height a horizontal legend below a Plotly figure needs, so the figure can grow by it instead of 
+    shrinking the plot.
+    Each group holds the legend labels shown together (e.g. by one button); the group with the most rows sets the height.
+    """
+    legend_width_px = figure_width_px - PLOTLY_SIDE_MARGINS_PX
+    legend_row_count = 0
+    for labels in legend_label_groups:
+        entry_widths_px = [len(label) * LEGEND_CHAR_WIDTH_PX + LEGEND_ENTRY_PADDING_PX for label in labels]
+        if sum(entry_widths_px) <= legend_width_px:
+            row_count = 1
+        else:
+            # Plotly then switches to a grid whose columns are as wide as the widest entry.
+            entries_per_row = max(1, legend_width_px // max(entry_widths_px))
+            row_count = math.ceil(len(entry_widths_px) / entries_per_row)
+        legend_row_count = max(legend_row_count, row_count)
+    return legend_row_count * LEGEND_ROW_HEIGHT_PX
 
 # =============================================================================
 # Config combination helpers
