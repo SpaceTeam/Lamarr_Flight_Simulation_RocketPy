@@ -895,6 +895,11 @@ class ZonesConfig(_Base):
     buffer_zones_are_suboptimal_but_safe
         If true, landings in buffer_zones mark a heading as "suboptimal" (still safe) instead of unsafe;
         shown in yellow. The enlarged exclusion zones stay unsafe either way.
+    border
+        Optional border of the launch area as one polygon [[distance_m, heading_deg], ...]. Landing outside of it is unsafe.
+        Leave out for no border.
+    border_safety_margin_m
+        Distance [m] inside the border that also counts as unsafe, shown as a dashed line.
     satellite_image
         Background of the landing plots. Leave out to plot without background.
         - `"download"`: downloads the image around the launch rail on every run (needs internet) and saves it as
@@ -909,6 +914,8 @@ class ZonesConfig(_Base):
     buffer_zones: dict[str, list[_PolarPoint]] = Field(default_factory=dict)
     exclusion_zone_safety_margin: float = 1.0
     buffer_zones_are_suboptimal_but_safe: bool = False
+    border: Optional[list[_PolarPoint]] = None
+    border_safety_margin_m: float = 100
     satellite_image: Optional[str] = None
     satellite_image_radius: float = 3000
 

@@ -8,6 +8,7 @@ pydantic
 tomlkit
 pyproj
 pymap3d
+shapely
 tabulate
 
 # Weather data

@@ -11,8 +11,7 @@ from IPython import get_ipython
 from IPython.display import Markdown, display
 from pydantic import BaseModel
 from rocketpy import EmptyMotor
-from simulation_core.config_schema import Config, SimParams, ZonesConfig, PAIRED_VARIATIONS, accepts_variation
-from simulation_core.export_satellite_image import DOWNLOAD_KEYWORD, download_satellite_image
+from simulation_core.config_schema import Config, SimParams, PAIRED_VARIATIONS, accepts_variation
 
 FLIGHT_MAX_TIME_S = 3600            # RocketPy's 600 s default cuts off long descents (e.g. main at apogee)
 FLIGHT_MAX_TIME_STEP_S = 0.1        # upper limit per solver step; the uncapped first step (~max_time/1000 = 3.6 s) can jump over a whole motor burn
@@ -303,113 +302,13 @@ def load_config(config_path: Path):
 
 
 # =============================================================================
-# Zone loading
+# Coordinates
 # =============================================================================
-
-def scale_zones(zones: dict[str, list[tuple[float, float]]], scale_factor: float):
-    """
-    Scale polygon coordinates around each polygon centroid.
-    
-    - scale_factor > 1  -> enlarge
-    - scale_factor = 1  -> unchanged
-    - scale_factor < 1  -> shrink
-    
-    Args:
-        zones: dict of {zone_name: [(x, y), ...]} in local Cartesian coordinates.
-        scale_factor: how much to scale the zones (e.g. 1.1)
-    """
-    enlarged = {}
-
-    for zone_name, coordinates in zones.items():
-        # Calculate centroid (average of points)
-        cx = sum(x for x, y in coordinates) / len(coordinates)
-        cy = sum(y for x, y in coordinates) / len(coordinates)
-
-        new_coords = []
-        for x, y in coordinates:
-            # Vector from center to point
-            dx = x - cx
-            dy = y - cy
-
-            # Scale vector
-            new_x = cx + dx * scale_factor
-            new_y = cy + dy * scale_factor
-
-            new_coords.append((new_x, new_y))
-
-        enlarged[zone_name] = new_coords
-
-    return enlarged
-
-
-def _polar_to_cartesian(distance_m: float, heading_deg: float):
-    """
-    Convert a zone vertex from polar [distance, heading] to Cartesian (x, y).
-
-    Args:
-        distance_m: Distance from launch site to zone corner, in meters.
-        heading_deg: Heading angle measured clockwise from north, in degrees; meaning 0° = North, 90° = East.
-    """
-    heading_rad = math.radians(heading_deg)
-    return (distance_m * math.sin(heading_rad), distance_m * math.cos(heading_rad))
-
 
 def latlon_to_local_xy(lat, lon, ref_lat, ref_lon):
     """Convert (lat, lon) to local Cartesian (x_east, y_north) meters around (ref_lat, ref_lon)."""
     x_east, y_north, _ = pymap3d.geodetic2enu(lat, lon, 0.0, ref_lat, ref_lon, 0.0)
     return float(x_east), float(y_north)
-
-
-def load_zones(zones_path: Path):
-    """
-    Load polygon zones from a TOML file.
-
-    The TOML file should contain the tables `exclusion_zones` and `buffer_zones`.
-    Each zone is defined as polar points:
-
-        `{name: [(distance_m, heading_deg), ...]}`
-
-    - exclusion_zones: Zones where the rocket must not land.
-
-    - buffer_zones: Safety margin zones around exclusion zones, or zones where the rocket should preferably not land,
-        such as forests.
-
-    - suboptimal_zones: The buffer zones when `buffer_zones_are_suboptimal_but_safe` is true (buffer_zones is then empty),
-        otherwise empty. Landing there is safe but should preferably be avoided.
-
-    - exclusion_zone_safety_margin: Factor used to enlarge exclusion zones when checking whether a flight is unsafe.
-
-    - satellite_image: Path of the background GeoTIFF for the landing plots, or None if zones.toml sets none.
-        With satellite_image = "download" the image is downloaded first.
-
-    We later mark a flight as unsafe if any trajectory (nominal, no_main, ballistic) enters a buffer zone,
-    and as suboptimal if it only enters a suboptimal zone.
-    """
-    if not zones_path.exists():
-        return {}, {}, {}, 1, None
-
-    with open(zones_path, "rb") as zones_file:
-        zones = ZonesConfig.model_validate(tomllib.load(zones_file))
-
-    def convert(zone_dict):
-        return {
-            name: [_polar_to_cartesian(dist, heading) for dist, heading in points]
-            for name, points in zone_dict.items()
-        }
-
-    exclusion_zones = convert(zones.exclusion_zones)
-    buffer_zones = convert(zones.buffer_zones)
-    project_path = zones_path.parent
-    if zones.satellite_image == DOWNLOAD_KEYWORD:
-        satellite_image = download_satellite_image(project_path, zones.satellite_image_radius)
-    elif zones.satellite_image:
-        satellite_image = project_path / zones.satellite_image
-    else:
-        satellite_image = None
-    # Move the buffer zones into the suboptimal group so they no longer make a heading unsafe
-    if zones.buffer_zones_are_suboptimal_but_safe:
-        return exclusion_zones, {}, buffer_zones, zones.exclusion_zone_safety_margin, satellite_image
-    return exclusion_zones, buffer_zones, {}, zones.exclusion_zone_safety_margin, satellite_image
 
 
 # =============================================================================

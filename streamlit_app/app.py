@@ -31,7 +31,7 @@ if str(REPO_DIR) not in python_paths:
 
 from streamlit_app.run_simulation import ERROR_PREFIX, FLIGHT_PROGRESS_PREFIX, PROGRESS_PREFIX, PROJECTS_DIR, REPORT_FILE_NAME
 from simulation_core.config_schema import Config, ZonesConfig
-from simulation_core.kml_zones import EXCLUSION_KEYWORD, LAUNCH_RAIL_NAME, format_zones, read_kml_zones
+from simulation_core.zones import BORDER_NAME, EXCLUSION_KEYWORD, LAUNCH_RAIL_NAME, format_zones, read_kml_zones
 from streamlit_app.config_writer import read_comments, update_config_file, write_config_file
 from streamlit_app.config_form import clear_form_state, render_model_form, to_toml_text
 
@@ -177,29 +177,32 @@ def show_kml_import(zones_path: Path, key_prefix: str) -> None:
     with st.expander("Import zones from a KML file", icon=":material/upload_file:"):
         st.caption(
             f'The KML file needs a point named "{LAUNCH_RAIL_NAME}" and one polygon per zone. '
+            f'An optional polygon named "{BORDER_NAME}" becomes the border of the launch area. '
             f'Polygons whose name contains "{EXCLUSION_KEYWORD}" become exclusion zones, all others buffer zones. '
-            f"Importing replaces all zones in the form below; Save writes them to {zones_path.name}."
+            f"Importing replaces all zones and the border in the form below; Save writes them to {zones_path.name}."
         )
         kml_file = st.file_uploader("KML file", type=["kml"], key=f"{key_prefix}.kml_file")
         if kml_file is None:
             return
         try:
-            exclusion_zones, buffer_zones = read_kml_zones(kml_file.getvalue())
+            kml_zones = read_kml_zones(kml_file.getvalue())
         except ValueError as error:
             st.error(f"Could not read {kml_file.name}: {error}")
             return
-        st.code(format_zones(exclusion_zones, buffer_zones), language="toml")
+        st.code(format_zones(kml_zones), language="toml")
         if not st.button("Fill the zone fields", key=f"{key_prefix}.kml_import", type="primary"):
             return
 
         if not zones_path.is_file():
             write_config_file(ZonesConfig, {}, zones_path)
         # The form is drawn after this function, so setting its widget state now shows the imported zones in this same run.
-        st.session_state[f"{key_prefix}.exclusion_zones"] = to_toml_text(exclusion_zones)
-        st.session_state[f"{key_prefix}.buffer_zones"] = to_toml_text(buffer_zones)
+        # A KML file without a border empties the border field (to_toml_text(None) is "").
+        for field_name, value in kml_zones.items():
+            st.session_state[f"{key_prefix}.{field_name}"] = to_toml_text(value)
+        border_note = "and the border " if kml_zones["border"] else ""
         st.success(
-            f"Filled in {len(exclusion_zones)} exclusion and {len(buffer_zones)} buffer zones from {kml_file.name}. "
-            f"Click Save {zones_path.name} to keep them."
+            f"Filled in {len(kml_zones['exclusion_zones'])} exclusion and {len(kml_zones['buffer_zones'])} buffer zones "
+            f"{border_note}from {kml_file.name}. Click Save {zones_path.name} to keep them."
         )
 
 

@@ -13,7 +13,7 @@ Lamarr_Flight_Simulation_RocketPy/
 │   ├── outputs.py                    prints, plots, landing safety classification, KML/CSV export
 │   ├── reanalysis.py                 compares flight-computer data with the simulation after a flight
 │   ├── export_weather_data.py        downloads atmosphere profiles for 'custom_atmosphere' and the OpenRocket wind profiles
-│   ├── kml_zones.py                  converts zones drawn in Google Earth (KML) to the zones.toml format
+│   ├── zones.py                      converts zones drawn in Google Earth (KML) to the zones.toml format; loads zones.toml; performs landing checks
 │   ├── export_satellite_image.py     downloads a satellite image of the launch site as landing plot background
 │   ├── custom_print_and_plot_functions.py   additional prints and plots
 │   └── utils.py                      config and zone loading, variation handling, helpers
@@ -85,12 +85,14 @@ The landing zones in `zones.toml` can be drawn in Google Earth and imported from
 
 1. In Google Earth, add a **point** named `launch_rail` at the launch rail location.
 2. Draw one **polygon** per zone. A polygon whose name contains `exclusion` becomes an exclusion zone, all others buffer zones.
+   Optionally draw one polygon named `border` around the launch area: landings outside of it, or closer to it than
+   `border_safety_margin_m`, are unsafe.
    A `(exclusion)` or `exclusion` marker is removed from the name, e.g. `Cars (exclusion)` or `Cars exclusion` becomes the exclusion zone `"Cars"`.
 3. Export the project as KML.
 4. Import it, one of:
    - Streamlit app: `zones.toml` tab → *Import zones from a KML file* → *Fill the zone fields*, check them, then *Save zones.toml*.
-     All zones are replaced; `exclusion_zone_safety_margin` and the comments stay. Without a `zones.toml`, the import first creates an empty one.
-   - Terminal: `python simulation_core/kml_zones.py "projects/ALBATROSS_II/ALBATROSS II.kml"` prints the zones, ready to copy into `zones.toml`.
+     All zones and the border are replaced; `exclusion_zone_safety_margin`, `border_safety_margin_m` and the comments stay. Without a `zones.toml`, the import first creates an empty one.
+   - Terminal: `python -m simulation_core.zones "projects/ALBATROSS_II/ALBATROSS_II_zones.kml"` prints the zones, ready to copy into `zones.toml`.
 
 Each corner becomes `[distance_m, heading_deg]` (polar coordinates) from `launch_rail`, measured on the WGS84 ellipsoid (heading: 0 = North, 90 = East, clockwise).
 

@@ -14,13 +14,13 @@ import nbformat
 from tabulate import tabulate
 from nbconvert import HTMLExporter
 
-from matplotlib.path import Path as MatplotlibPath
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import rasterio
 from rasterio.warp import transform_bounds
 from PIL import Image
+import shapely
 from rocketpy.simulation import FlightDataExporter
 from rocketpy import Flight, Environment, Motor, Fins, Rocket
 
@@ -28,6 +28,7 @@ from simulation_core.utils import *
 from simulation_core.custom_print_and_plot_functions import CustomPlots, CustomPrints, get_shock_at_parachute_deployment, get_speed_at_parachute_deployment
 from simulation_core.config_schema import SimParams, RocketConfig
 from simulation_core.reanalysis import stitch_ascent_and_descent
+from simulation_core.zones import UNSAFE_ZONE_TYPES, Zones
 SCENARIO_COLORS = {"nominal": "green", "no_main": "orange", "ballistic": "red", "matched": "purple", "payload": "blue", "ascent": "gray"}
 SAFETY_LABELS = ("safe", "suboptimal", "unsafe")
 NOTEBOOK_SAVE_TIMEOUT_S = 30
@@ -654,11 +655,14 @@ def print_configurations(title: str, nominal_points: list["LandingPoint"]):
             print(f"- {configuration}: inclinations {sorted(inclinations)}")
 
 
-def print_flight_details(landing_points: list["LandingPoint"], label_by_heading: dict[float, str], safety_label: str,
-                         buffer_zones: dict, suboptimal_zones: dict):
-    """Print one table with landing coordinates, distance and landing zone type for every landing point with the given safety label.
+def print_flight_details(
+    landing_points: list["LandingPoint"], label_by_heading: dict[float, str], safety_label: str, zones: Zones
+):
+    """Print one table with landing coordinates, distance and landing zone type for every landing point with the given 
+    safety label.
 
-    The unsafe table only lists points that landed in a buffer zone; heading/inclination/scenario cells that repeat the row above are left blank.
+    The unsafe table only lists points that landed in a buffer zone or outside the border; heading/inclination/scenario 
+    cells that repeat the row above are left blank.
     """
     printmd(f"## {safety_label.capitalize()} flight details")
 
@@ -670,14 +674,8 @@ def print_flight_details(landing_points: list["LandingPoint"], label_by_heading:
         if point.scenario not in scenario_order or label_by_heading[point.heading] != safety_label:
             continue
 
-        if lands_in_zone(point.x_east_m, point.y_north_m, buffer_zones):
-            zone_type = "unsafe"
-        elif lands_in_zone(point.x_east_m, point.y_north_m, suboptimal_zones):
-            zone_type = "subopt."
-        else:
-            zone_type = "safe"
-
-        if safety_label == "unsafe" and zone_type != "unsafe":
+        zone_type = zones.landing_zone_type(point.x_east_m, point.y_north_m)
+        if safety_label == "unsafe" and zone_type not in UNSAFE_ZONE_TYPES:
             continue
 
         coordinates = f"{point.latitude:.6f}, {point.longitude:.6f}"
@@ -753,9 +751,7 @@ def print_landing_distance_summary(landing_points: list["LandingPoint"], label_b
     )
 
 
-def print_safety_summary(
-    landing_points: list["LandingPoint"], label_by_heading: dict[float, str], buffer_zones: dict, suboptimal_zones: dict
-):
+def print_safety_summary(landing_points: list["LandingPoint"], label_by_heading: dict[float, str], zones: Zones):
     """Print the landing distance summary, then the configurations and flight details per safety label 
     (shared by RocketPy and OpenRocket)."""
     print_landing_distance_summary(landing_points, label_by_heading)
@@ -766,7 +762,7 @@ def print_safety_summary(
     }
     for safety_label, title in titles.items():
         # Without suboptimal zones no heading can be suboptimal, so its section is left out.
-        if safety_label == "suboptimal" and not suboptimal_zones:
+        if safety_label == "suboptimal" and not zones.suboptimal:
             continue
         nominal_points = [
             point
@@ -774,7 +770,7 @@ def print_safety_summary(
             if point.scenario == "nominal" and label_by_heading[point.heading] == safety_label
         ]
         print_configurations(title, nominal_points)
-        print_flight_details(landing_points, label_by_heading, safety_label, buffer_zones, suboptimal_zones)
+        print_flight_details(landing_points, label_by_heading, safety_label, zones)
 
 
 # =============================================================================
@@ -828,15 +824,17 @@ def landing_points_from_runtime(params: SimParams) -> list[LandingPoint]:
     ]
 
 
-def classify_headings(landing_points: list[LandingPoint], buffer_zones: dict, suboptimal_zones: dict) -> dict[float, str]:
-    """Return {heading: "safe" | "suboptimal" | "unsafe"}: a heading is unsafe if any of its points lands in a buffer zone,
-    otherwise suboptimal if any lands in a suboptimal zone."""
-    unsafe_headings = {point.heading for point in landing_points if lands_in_zone(point.x_east_m, point.y_north_m, buffer_zones)}
+def classify_headings(landing_points: list[LandingPoint], zones: Zones) -> dict[float, str]:
+    """Return {heading: "safe" | "suboptimal" | "unsafe"}: a heading is unsafe if any of its points lands in a buffer 
+    zone or outside the border, otherwise suboptimal if any lands in a suboptimal zone."""
+    # Collect the zone types all landing points of each heading ended up in.
+    zone_types_by_heading = {}
+    for point in landing_points:
+        zone_types_by_heading.setdefault(point.heading, set()).add(zones.landing_zone_type(point.x_east_m, point.y_north_m))
     # A heading that is unsafe stays unsafe even if it also lands in a suboptimal zone.
-    suboptimal_headings = {point.heading for point in landing_points if lands_in_zone(point.x_east_m, point.y_north_m, suboptimal_zones)} - unsafe_headings
     return {
-        point.heading: "unsafe" if point.heading in unsafe_headings else "suboptimal" if point.heading in suboptimal_headings else "safe"
-        for point in landing_points
+        heading: "unsafe" if zone_types & UNSAFE_ZONE_TYPES else "suboptimal" if "subopt." in zone_types else "safe"
+        for heading, zone_types in zone_types_by_heading.items()
     }
 
 
@@ -851,11 +849,6 @@ def get_flights(params: SimParams, attr_name: str) -> list[Flight]:
 def landing_distance(flight: Flight) -> float:
     """Return the horizontal distance in meters between the launch rail and the flight's impact point."""
     return float(np.hypot(flight.x_impact, flight.y_impact))
-
-
-def lands_in_zone(x_east_m: float, y_north_m: float, zones: dict) -> bool:
-    """Return True when the landing point lies inside any of the supplied zone polygons."""
-    return any(MatplotlibPath(zone_coordinates).contains_point((x_east_m, y_north_m)) for zone_coordinates in zones.values())
 
 
 def print_flight_stats(params: SimParams):
@@ -956,16 +949,16 @@ def print_stats_table(scenario: str, rows: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(table_rows, columns=single_line_headers)
 
 
-def calculate_safe_flights(params: SimParams, landing_points: list[LandingPoint], buffer_zones: dict, suboptimal_zones: dict) -> dict[float, str]:
+def calculate_safe_flights(params: SimParams, landing_points: list[LandingPoint], zones: Zones) -> dict[float, str]:
     """Classify all flights as safe, suboptimal or unsafe based on landing zone membership, print the results
     and return {heading: safety label}.
 
-    A heading is unsafe if any scenario (nominal/no_main/ballistic/payload), inclination,
-    or environment caused a landing inside a buffer zone; otherwise it is suboptimal if any landed inside a suboptimal zone.
+    A heading is unsafe if any scenario (nominal/no_main/ballistic/payload), inclination, or environment caused a landing
+    inside a buffer zone or outside the border; otherwise it is suboptimal if any landed inside a suboptimal zone.
     """
-    label_by_heading = classify_headings(landing_points, buffer_zones, suboptimal_zones)
+    label_by_heading = classify_headings(landing_points, zones)
     print_flight_stats(params)
-    print_safety_summary(landing_points, label_by_heading, buffer_zones, suboptimal_zones)
+    print_safety_summary(landing_points, label_by_heading, zones)
     return label_by_heading
 
 
@@ -973,21 +966,21 @@ def calculate_safe_flights(params: SimParams, landing_points: list[LandingPoint]
 # Landing position plots
 # =============================================================================
 
-def plot_zones(figure: go.Figure, zones: dict[str, list[tuple[float, float]]], label: str, color: str, alpha=0.3):
+def plot_zones(figure: go.Figure, zones: dict[str, shapely.Polygon], label: str, color: str, alpha=0.3):
     """Plot exclusion or buffer-zone polygons."""
     if not zones:
         return
 
-    for index, (name, coordinates) in enumerate(zones.items()):
-        x_values = [x for x, y in coordinates] + [coordinates[0][0]]
-        y_values = [y for x, y in coordinates] + [coordinates[0][1]]
+    for index, (name, polygon) in enumerate(zones.items()):
+        # The exterior ring already ends with its first corner, so the drawn outline is closed.
+        x_values, y_values = polygon.exterior.xy
 
         # Only the first polygon in the group carries the legend entry so the legend stays compact.
         show_legend = index == 0
 
         figure.add_trace(go.Scatter(
-            x=x_values,
-            y=y_values,
+            x=list(x_values),
+            y=list(y_values),
             mode="lines",
             fill="toself",
             fillcolor=color,
@@ -999,16 +992,35 @@ def plot_zones(figure: go.Figure, zones: dict[str, list[tuple[float, float]]], l
             hoverinfo="skip",
         ))
 
-        # Label each zone at the centroid (mean of its vertices).
-        centroid_x = sum(x for x, y in coordinates) / len(coordinates)
-        centroid_y = sum(y for x, y in coordinates) / len(coordinates)
+        # Label each zone at its centroid.
         figure.add_annotation(
-            x=centroid_x,
-            y=centroid_y,
+            x=polygon.centroid.x,
+            y=polygon.centroid.y,
             text=name,
             showarrow=False,
             font=dict(color=color, size=10),
         )
+
+
+def plot_border(figure: go.Figure, zones: Zones):
+    """Draw the border of the launch area as a line and its safety margin as a dashed line, both without fill."""
+    if zones.border is None:
+        return
+
+    for label, area, dash in [("Border", zones.border, "solid"), ("Border safety margin", zones.safe_border, "dash")]:
+        # The safety margin can split the border into several parts where it cuts through a narrow spot.
+        for index, part in enumerate(shapely.get_parts(area)):
+            x_values, y_values = part.exterior.xy
+            figure.add_trace(go.Scatter(
+                x=list(x_values),
+                y=list(y_values),
+                mode="lines",
+                line=dict(color="darkviolet", dash=dash),
+                name=label,
+                legendgroup=label,
+                showlegend=index == 0,
+                hoverinfo="skip",
+            ))
 
 
 def add_compass_labels(figure: go.Figure):
@@ -1111,34 +1123,34 @@ def add_satellite_background(figure: go.Figure, image_path: Path, rail_latitude:
 
 def plot_landing_positions_with_modes(
     params: SimParams,
-    exclusion_zones,
-    buffer_zones,
-    suboptimal_zones,
+    zones: Zones,
     plot_name,
     landing_points: list[LandingPoint] | None = None,
     label_by_heading: dict[float, str] | None = None,
     zones_only=False,
     flight_computer_impacts=None,
-    satellite_image: Path | None = None,
-    source: str = "",
+    source: str = "RocketPy",
 ):
     """Build an interactive landing-position plot with All/Safe/Suboptimal/Unsafe buttons.
 
-    When zones_only is True only the zones are drawn. Otherwise the buttons switch between all landing_points and the
-    points of each safety label in label_by_heading (see classify_headings). satellite_image is an optional GeoTIFF background.
+    When zones_only is True only the zones are drawn and the view shows the whole border. Otherwise the buttons switch
+    between all landing_points and the points of each safety label in label_by_heading (see classify_headings), and the
+    view focuses on the zones and landing points.
     """
     project_path = params.project_path
     ensure_project_folders(project_path)
     figure = go.Figure()
 
-    if satellite_image:
+    if zones.satellite_image:
         environment = params.config.environment
-        add_satellite_background(figure, satellite_image, environment.latitude, environment.longitude)
+        add_satellite_background(figure, zones.satellite_image, environment.latitude, environment.longitude)
 
-    # Plot from least to most critical so the red exclusion zones stay on top.
-    plot_zones(figure, suboptimal_zones, label="Suboptimal zone", color="gold")
-    plot_zones(figure, buffer_zones, label="Buffer zone", color="orange")
-    plot_zones(figure, exclusion_zones, label="Exclusion zone", color="red")
+    # Plot from least to most critical so the red exclusion zones stay on top; the border goes first, below everything.
+    plot_border(figure, zones)
+    border_trace_count = len(figure.data)
+    plot_zones(figure, zones.suboptimal, label="Suboptimal zone", color="gold")
+    plot_zones(figure, zones.buffer, label="Buffer zone", color="orange")
+    plot_zones(figure, zones.exclusion, label="Exclusion zone", color="red")
 
     if not zones_only:
         zone_trace_count = len(figure.data)
@@ -1197,7 +1209,14 @@ def plot_landing_positions_with_modes(
         }
         add_plotly_buttons(figure, mode_trace_indices, always_visible_for_modes, zone_legend_flags)
 
-    if satellite_image:
+        # Zoom to everything except the border, which can span a far larger area
+        focus_x = np.concatenate([np.asarray(trace.x, dtype=float) for trace in figure.data[border_trace_count:]])
+        focus_y = np.concatenate([np.asarray(trace.y, dtype=float) for trace in figure.data[border_trace_count:]])
+        padding = 0.1 * max(np.ptp(focus_x), np.ptp(focus_y))
+        figure.update_xaxes(range=[focus_x.min() - padding, focus_x.max() + padding])
+        figure.update_yaxes(range=[focus_y.min() - padding, focus_y.max() + padding])
+
+    if zones.satellite_image:
         gridcolor = "gray"
     else:
         gridcolor = "lightgray"
@@ -1238,7 +1257,7 @@ def plot_landing_positions_with_modes(
 # Notebook display mode
 # =============================================================================
 
-def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, suboptimal_zones, satellite_image: Path | None = None):
+def run_notebook_display_mode(params: SimParams, zones: Zones):
     """Run the notebook display mode that fits the config: a single flight or variations.
 
     Both modes share the same All/Safe/Suboptimal/Unsafe landing-positions plot and the 3D trajectory comparison.
@@ -1248,21 +1267,17 @@ def run_notebook_display_mode(params: SimParams, exclusion_zones, buffer_zones, 
     payload_flights = get_flights(params, "flight_payload")
 
     landing_points = landing_points_from_runtime(params)
-    label_by_heading = calculate_safe_flights(params, landing_points, buffer_zones, suboptimal_zones)
+    label_by_heading = calculate_safe_flights(params, landing_points, zones)
 
     flight_computer_impacts = ensure_list(params.runtime.flight_computer_impacts or [])
 
     plot_landing_positions_with_modes(
         params,
-        exclusion_zones,
-        buffer_zones,
-        suboptimal_zones,
+        zones,
         plot_name="landing_positions",
         landing_points=landing_points,
         label_by_heading=label_by_heading,
         flight_computer_impacts=flight_computer_impacts,
-        satellite_image=satellite_image,
-        source="RocketPy"
     )
 
     all_flights = [flight for scenario_set in scenario_sets for flight in scenario_set.values()]

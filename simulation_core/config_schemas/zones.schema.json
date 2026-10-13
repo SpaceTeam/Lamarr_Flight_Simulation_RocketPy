@@ -56,6 +56,38 @@
       "title": "Buffer Zones Are Suboptimal But Safe",
       "type": "boolean"
     },
+    "border": {
+      "anyOf": [
+        {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional border of the launch area as one polygon [[distance_m, heading_deg], ...]. Landing outside of it is unsafe.\nLeave out for no border.",
+      "title": "Border"
+    },
+    "border_safety_margin_m": {
+      "default": 100,
+      "description": "Distance [m] inside the border that also counts as unsafe, shown as a dashed line.",
+      "title": "Border Safety Margin M",
+      "type": "number"
+    },
     "satellite_image": {
       "anyOf": [
         {

@@ -9,7 +9,7 @@ Web Mercator (EPSG:3857) is a projected coordinate system, that flattens Earth o
 EPSG:4326 uses unprojected geographic coordinates (latitude and longitude measured in degrees) on a 3D globe.
 
 Two ways to use it:
-- zones.toml: satellite_image = "download" downloads the image on every run (see load_zones in utils.py).
+- zones.toml: satellite_image = "download" downloads the image on every run (see Zones.load_from_toml in zones.py).
 - Terminal, from the repository folder (downloads once and sets satellite_image = "satellite_image.tif" for offline runs):
     python -m simulation_core.export_satellite_image "projects/ALBATROSS_II"
 """
