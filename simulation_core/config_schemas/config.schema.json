@@ -41,12 +41,26 @@
         "latitude": {
           "description": "Launch site latitude [°].",
           "title": "Latitude",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ]
         },
         "longitude": {
           "description": "Launch site longitude [°].",
           "title": "Longitude",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ]
         },
         "max_expected_height": {
           "anyOf": [
@@ -80,7 +94,14 @@
         "elevation": {
           "description": "Launch site elevation above sea level [m ASL].",
           "title": "Elevation",
-          "type": "number"
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            }
+          ]
         },
         "timezone": {
           "description": "IANA timezone of the launch site. Applied to `date`.",

@@ -1038,10 +1038,11 @@ def adapt_schema_for_tombi(schema: dict) -> None:
     models = [schema, *schema.get("$defs", {}).values()]
     for model in models:
         for field in model.get("properties", {}).values():
-            if "anyOf" not in field:
-                continue
-
             # 1. Put an "integer" alternative before each "number" one, so a value like heading = 350 matches an alternative.
+            if field.get("type") == "number":  # plain float field with no alternatives
+                field["anyOf"] = [{"type": field.pop("type")}]   # move type "number" to alternatives
+            if "anyOf" not in field:            # single non-number type (bool, string, section): nothing to adapt
+                continue
             alternatives = []
             for alternative in field["anyOf"]:
                 if alternative.get("type") == "number":

@@ -48,7 +48,14 @@
       "default": 1.0,
       "description": "Factor that enlarges the exclusion zones into extra buffer zones, e.g. 1.3 = 30% larger.",
       "title": "Exclusion Zone Safety Margin",
-      "type": "number"
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        }
+      ]
     },
     "buffer_zones_are_suboptimal_but_safe": {
       "default": false,
@@ -86,7 +93,14 @@
       "default": 100,
       "description": "Distance [m] inside the border that also counts as unsafe, shown as a dashed line.",
       "title": "Border Safety Margin M",
-      "type": "number"
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        }
+      ]
     },
     "satellite_image": {
       "anyOf": [
@@ -113,7 +127,14 @@
       "default": 3000,
       "description": "Half side length [m] of the square image around the launch rail, used with satellite_image = \"download\".",
       "title": "Satellite Image Radius",
-      "type": "number"
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number"
+        }
+      ]
     }
   },
   "title": "ZonesConfig",
