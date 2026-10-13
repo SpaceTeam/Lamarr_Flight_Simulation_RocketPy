@@ -27,7 +27,8 @@ rasterio
 Pillow
 
 # Satellite background export
-contextily
+contextily==1.7.1     # pinned: export_satellite_image.py uses contextily's internal tile cache for the progress display
+mercantile
 xyzservices
 
 # Notebooks
