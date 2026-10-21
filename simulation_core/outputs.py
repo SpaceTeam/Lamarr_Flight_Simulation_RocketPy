@@ -55,6 +55,7 @@ STATS_COLUMNS = {
     "speed_at_main_deployment": ("speed @\nmain deployment [m/s]", 2),
 }
 STATS_LABEL_COLUMNS = ("Environment", "Config")
+ENVIRONMENT_NAME_SORT_KEY = natsort_keygen(alg=ns.FLOAT)   # compare numbers in names by value: sort 1, 2, 10 not 1, 10, 2
 
 
 # =============================================================================
@@ -528,6 +529,7 @@ def plot_3d_trajectories(
         hoverlabel=dict(namelength=-1),
         legend=dict(orientation="h", x=0, xanchor="left", y=0, yanchor="top"),
         width=TRAJECTORY_PLOT_WIDTH_PX,
+        # width=800,
         height=figure_height_px,
     )
 
@@ -880,8 +882,8 @@ def print_scenario_stats(params: SimParams, scenario: str) -> pd.DataFrame | Non
     # Sort by the variation values, then by environment name
     scenario_flights.sort(key=lambda flight: 
         (tuple(getattr(flight, "_meta", {}).values()), 
-         natsort_keygen(alg=ns.FLOAT)(flight.env.name))    # compare numbers in names by value instead string: sort 1, 2, 10 not 1, 10, 2
-        ) 
+         ENVIRONMENT_NAME_SORT_KEY(flight.env.name))            # compare numbers in names by value instead string: sort 1, 2, 10 not 1, 10, 2
+        )        
     for flight in scenario_flights:
         meta = getattr(flight, "_meta", {})
         row = {"Environment": flight.env.name, "Config": ",\n".join(f"{k}={v}" for k, v in meta.items()) if meta else "-"}
