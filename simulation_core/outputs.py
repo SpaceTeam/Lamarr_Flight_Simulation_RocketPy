@@ -21,6 +21,7 @@ import rasterio
 from rasterio.warp import transform_bounds
 from PIL import Image
 import shapely
+from natsort import natsort_keygen, ns
 from rocketpy.simulation import FlightDataExporter
 from rocketpy import Flight, Environment, Motor, Fins, Rocket
 
@@ -876,9 +877,11 @@ def print_scenario_stats(params: SimParams, scenario: str) -> pd.DataFrame | Non
     rows = []
 
     scenario_flights = [scenario_set[scenario] for scenario_set in params.runtime.scenario_sets if scenario in scenario_set]
-    # Sort by the variation values
-    scenario_flights.sort(key=lambda flight: (tuple(getattr(flight, "_meta", {}).values()), flight.env.name))
-
+    # Sort by the variation values, then by environment name
+    scenario_flights.sort(key=lambda flight: 
+        (tuple(getattr(flight, "_meta", {}).values()), 
+         natsort_keygen(alg=ns.FLOAT)(flight.env.name))    # compare numbers in names by value instead string: sort 1, 2, 10 not 1, 10, 2
+        ) 
     for flight in scenario_flights:
         meta = getattr(flight, "_meta", {})
         row = {"Environment": flight.env.name, "Config": ",\n".join(f"{k}={v}" for k, v in meta.items()) if meta else "-"}

@@ -10,6 +10,7 @@ pyproj
 pymap3d
 shapely
 tabulate
+natsort
 
 # Weather data
 openmeteo-requests
